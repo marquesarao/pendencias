@@ -72,6 +72,17 @@ export function rotuloDia(chave) {
   return `${DIAS[d.getDay()]}, ${doisDig(d.getDate())}/${doisDig(d.getMonth() + 1)}${ano}`;
 }
 
+// Dias de calendário (fuso local) desde uma data ISO: 0 = hoje, 1 = ontem…
+export function diasDesde(iso) {
+  const [a, m, d] = chaveDia(new Date(iso)).split('-').map(Number);
+  const [ha, hm, hd] = chaveDia().split('-').map(Number);
+  return Math.round((Date.UTC(ha, hm - 1, hd) - Date.UTC(a, m - 1, d)) / 864e5);
+}
+
+// Filtro especial "Aguardando" (ids de tag são UUIDs, então não colide).
+export const FILTRO_AGUARDANDO = ':aguardando';
+export const DIAS_ALERTA_AGUARDANDO = 7;
+
 export function debounce(fn, ms) {
   let t;
   return (...args) => {

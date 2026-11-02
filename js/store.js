@@ -170,13 +170,14 @@ export function buscarTagPorNome(nome) {
 // Pendências
 // ---------------------------------------------------------------------------
 
-export function criarPendencia({ titulo, tags = [] }) {
+export function criarPendencia({ titulo, tags = [], aguardando = false }) {
   const abertas = pendenciasAtivas();
   const ordem = abertas.length ? abertas[0].ordem - 1000 : 0; // novos itens no topo
   const agora = Date.now();
+  const iso = new Date(agora).toISOString();
   const p = inserir('pendencias', {
     id: uuid(), titulo, tags, foco: false, feito: false, feitoEm: '', prazo: '',
-    aguardando: false, ordem, criadoEm: new Date(agora).toISOString(),
+    aguardando, aguardandoEm: aguardando ? iso : '', ordem, criadoEm: iso,
     atualizadoEm: agora, excluido: false,
   });
   persistir([['pendencias', p]]);
@@ -187,6 +188,15 @@ export function editarPendencia(id, patch) {
   const p = alterar('pendencias', id, patch);
   if (p) persistir([['pendencias', p]]);
   return p;
+}
+
+// Ligar "aguardando" grava desde quando; desligar limpa.
+export function alternarAguardando(id) {
+  const p = dados.pendencias.get(id);
+  if (!p) return null;
+  return editarPendencia(id, p.aguardando
+    ? { aguardando: false, aguardandoEm: '' }
+    : { aguardando: true, aguardandoEm: new Date().toISOString() });
 }
 
 export function alternarFeito(id) {

@@ -40,6 +40,7 @@
   --ok-fg: #256f3a;  --ok-bg: #e7f4eb;
   --aviso-fg: #b34d00; --aviso-bg: #fff1e3;
   --espera-fg: #8a3fb0; --espera-bg: #f4ebfa;
+  --sunken: #f3f5f8; --sunken-line: #e3e7ec;   /* bloco rebaixado (Etapas) */
   --mark: #ffe7a3;
   --backdrop: rgb(29 45 62 / .35);
   --toast-bg: #1d2d3e;
@@ -94,6 +95,7 @@
     --focus-line: #4a5a2a;
     --focus-ink: #c8f169;
     --focus-shadow: none;
+    --sunken: #1e2126; --sunken-line: #2c3036;
     --star: #c8f169;
     --danger: #ff8a80;
     --danger-ink: #1c1f24;
@@ -145,6 +147,7 @@
   --focus-line: #4a5a2a;
   --focus-ink: #c8f169;
   --focus-shadow: none;
+  --sunken: #1e2126; --sunken-line: #2c3036;
   --star: #c8f169;
   --danger: #ff8a80;
   --danger-ink: #1c1f24;
@@ -183,6 +186,7 @@
 [data-cor="c7"] { --fg: var(--c7-fg); --tbg: var(--c7-bg); }
 [data-cor="c8"] { --fg: var(--c8-fg); --tbg: var(--c8-bg); }
 [data-cor="nenhuma"] { --fg: var(--muted-ui); --tbg: var(--surface-2); }
+[data-cor="espera"] { --fg: var(--espera-fg); --tbg: var(--espera-bg); }
 
 /* ------------------------------------------------------------------ base */
 
@@ -485,6 +489,7 @@ body.teclado .row.is-selected > .line { box-shadow: inset 0 0 0 1.5px color-mix(
 .meta-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .meta-item svg { width: 14px; height: 14px; stroke-width: 1.9; }
 .meta-espera { color: var(--espera-fg); }
+.meta-espera-alerta { color: var(--danger); font-weight: 700; }
 .prazo-hoje { color: var(--warn); }
 .prazo-vencido { color: var(--danger); }
 .meta-trecho {
@@ -510,8 +515,8 @@ body.teclado .row.is-selected > .line { box-shadow: inset 0 0 0 1.5px color-mix(
 }
 .anim-foco .star svg { animation: pop-estrela .5s var(--ease-pop); }
 
-/* Item expandido: a linha de cima continua mostrando o título (toque nela recolhe) e ganha o
-   botão "Fechar"; o título editável é o primeiro campo do detalhe. */
+/* Item expandido. Cabeçalho: título (toque recolhe) + lápis (editar no lugar) + estrela + ⌃.
+   Detalhe: ETAPAS → TAGS → Prazo/Aguardando → Excluir, com divisória fina entre seções. */
 .row.is-open {
   background: var(--surface);
   box-shadow: var(--shadow-2);
@@ -521,40 +526,54 @@ body.teclado .row.is-selected > .line { box-shadow: inset 0 0 0 1.5px color-mix(
 .section-focus .row.is-open { margin: 6px 0; }
 .row.is-open > .line { border-radius: 11px 11px 0 0; min-height: 46px; }
 .row.is-open .line-main { min-height: 46px; }
-.row.is-open .title { white-space: normal; font-weight: 650; }
+.row.is-open .title { white-space: normal; font-weight: 650; line-height: 1.45; }
 .row.is-open .line-tags, .row.is-open .meta { display: none; }
 
-.fechar {
+/* Botões do cabeçalho do item aberto */
+.editar, .fechar {
   display: none; place-items: center;
   width: 36px; height: 32px; flex: none;
   color: var(--text-2);
   border-radius: 10px;
 }
+.editar svg { width: 17px; height: 17px; }
 .fechar svg { width: 20px; height: 20px; }
-.fechar:hover { background: var(--surface-2); color: var(--text); }
-.row.is-open .fechar { display: grid; }
+.editar:hover, .fechar:hover { background: var(--surface-2); color: var(--text); }
+.row.is-open:not(.is-editing) .editar, .row.is-open .fechar { display: grid; }
+
+/* Título em edição: mesmo lugar, mesma fonte do título do cabeçalho */
+.title-edit {
+  display: none; flex: 1; min-width: 0;
+  margin: 6px 0 6px -3px; padding: 3px 6px;
+  font: inherit; font-weight: 650; line-height: 1.45; letter-spacing: -.005em;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--accent); border-radius: 8px;
+  box-shadow: 0 0 0 3px var(--ring);
+  resize: none; overflow: hidden; outline: 0;
+}
+.row.is-editing .line-main { display: none; }
+.row.is-editing .title-edit { display: block; }
 
 .detail {
-  padding: 2px 14px 14px 40px;
+  padding: 0 14px 14px 40px;
   animation: abrir .26s var(--ease);
 }
-.d-field { display: grid; gap: 4px; margin-bottom: 10px; cursor: text; }
-.d-title {
-  display: block; width: 100%;
-  padding: 7px 10px;
-  font-size: 15.5px; font-weight: 600; letter-spacing: -.005em; line-height: 1.4;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
-  resize: none; overflow: hidden;
-  transition: border-color .15s, box-shadow .15s;
-}
-.d-title:hover { border-color: var(--muted-ui); }
-.d-title:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.d-sec { padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.d-sec:first-child { border-top: 0; padding-top: 4px; }
+.d-sec:last-child { padding-bottom: 0; }
+.d-cab { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.d-label { font-size: 11.5px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.d-cont { font-size: 12px; font-weight: 700; color: var(--muted); }
 
-.obs-list { list-style: none; margin: 4px 0 6px; padding: 0; }
+/* ETAPAS: bloco rebaixado; o campo "Nova etapa" é a última linha do bloco */
+.etapas { background: var(--sunken); border-radius: 10px; padding: 0 10px; }
+.etapas:has(.obs-new :focus) { box-shadow: 0 0 0 3px var(--ring); }
+.obs-list { list-style: none; margin: 0; padding: 0; }
 .obs {
-  display: grid; grid-template-columns: 24px 40px 1fr 28px; align-items: start; gap: 4px;
-  padding: 3px 0;
+  display: grid; grid-template-columns: 24px 1fr 28px; align-items: start; gap: 6px;
+  padding: 7px 0;
   font-size: 14px; line-height: 1.45;
+  border-bottom: 1px solid var(--sunken-line);
 }
 .obs-tipo {
   display: grid; place-items: center;
@@ -571,7 +590,6 @@ body.teclado .row.is-selected > .line { box-shadow: inset 0 0 0 1.5px color-mix(
 .obs-tipo:hover svg { border-color: var(--accent); }
 .obs-ok .obs-tipo svg { background: var(--accent); border-color: var(--accent); stroke: var(--accent-ink); }
 .obs-ok .obs-texto { color: var(--text-2); }
-.obs-data { padding-top: 1px; font-size: 12.5px; font-weight: 650; color: var(--muted); }
 .obs-texto { overflow-wrap: anywhere; }
 .obs-x {
   display: grid; place-items: center; width: 26px; height: 22px;
@@ -583,26 +601,20 @@ body.teclado .row.is-selected > .line { box-shadow: inset 0 0 0 1.5px color-mix(
 .obs-x:hover { background: var(--danger-soft); color: var(--danger); }
 @media (hover: none) { .obs-x { opacity: 1; } }
 
-.obs-new {
-  display: flex; align-items: center; gap: 8px;
-  height: 38px; padding: 0 10px;
-  margin-left: -10px;
-  background: var(--surface-2);
-  border-radius: 10px;
-  border: 1px solid transparent;
-  transition: border-color .15s, background .15s, box-shadow .15s;
-  cursor: text;
-}
-.obs-new svg { width: 16px; height: 16px; color: var(--muted); }
-.obs-new input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 14.5px; }
+.obs-new { display: flex; align-items: center; gap: 8px; height: 40px; cursor: text; }
+.obs-new svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.obs-new input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font-size: 14.5px; color: var(--text); }
 .obs-new input::placeholder { color: var(--muted); }
-.obs-new:focus-within { background: var(--surface); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 0 0 3px var(--ring); }
 
-.d-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0 0; }
-.d-label { font-size: 11.5px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+/* TAGS: compactas (marcadas + "+ Tag"); a lista completa abre no lugar */
+.d-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .d-tags .chip { background: transparent; }
+.tags-lista { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.d-tags.is-aberta > .btn { margin-top: 6px; }
 
-.d-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+/* Prazo / Aguardando e Excluir */
+.d-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.d-fim { display: flex; justify-content: flex-end; padding-top: 12px; }
 .spacer { flex: 1; }
 .pill-group { display: inline-flex; align-items: center; }
 .pill {
@@ -911,20 +923,23 @@ body.arrastando-algo { cursor: grabbing; user-select: none; -webkit-user-select:
   .check, .star { height: var(--row-h); width: 40px; }
   .line-main { flex-wrap: wrap; align-content: center; row-gap: 3px; column-gap: 8px; padding: 7px 2px; }
   .title { flex: 1 1 100%; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35; }
+  .row.is-open .title { display: block; -webkit-line-clamp: unset; line-height: 1.45; } /* aberto: título inteiro */
   .line-tags { order: 2; }
   .meta { order: 3; margin-left: 0; padding-left: 0; gap: 10px; font-size: 12px; }
   .tag { height: 19px; font-size: 11px; }
-  .meta-rotulo { display: none; }
   .meta-trecho { max-width: 60vw; }
 
   .row.is-open { margin: 8px -4px; }
   .detail { padding: 0 12px 14px 14px; }
-  .fechar { width: 44px; height: var(--row-h); }
+  .editar, .fechar { width: 44px; height: var(--row-h); }
   .fechar svg { width: 22px; height: 22px; }
-  .obs { grid-template-columns: 26px 42px 1fr 30px; padding: 5px 0; font-size: 14.5px; }
+  .editar svg { width: 19px; height: 19px; }
+  .d-sec { padding: 20px 0; }
+  .d-sec:first-child { padding-top: 6px; }
+  .obs { grid-template-columns: 26px 1fr 32px; padding: 9px 0; font-size: 14.5px; }
   .obs-tipo { width: 26px; height: 26px; }
-  .obs-x { width: 30px; height: 26px; }
-  .obs-new { margin-left: 0; height: 44px; }
+  .obs-x { width: 32px; height: 28px; margin-top: -2px; }
+  .obs-new { height: 46px; }
   .pill, .link-danger, .btn-sm { height: 38px; }
 
   /* Painel como folha de baixo */
@@ -979,3 +994,6 @@ body.arrastando-algo { cursor: grabbing; user-select: none; -webkit-user-select:
 .chip.chip-tag[aria-pressed="true"] .chip-check { display: block; }
 .chip.chip-tag[aria-pressed="true"] .chip-n { color: inherit; }
 .chip-tag .chip-pos { background: var(--fg); color: var(--tag-selo-tinta); }
+
+.chip-tag .chip-icone { width: 14px; height: 14px; color: var(--fg); stroke-width: 2.2; }
+.chip.chip-tag[aria-pressed="true"] .chip-icone { display: none; }

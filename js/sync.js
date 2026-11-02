@@ -89,6 +89,8 @@ function daRede(table, r) {
   if (table === 'pendencias') {
     row.tags = String(r.tags || '').split(';').map(s => s.trim()).filter(Boolean);
     for (const b of ['foco', 'feito', 'aguardando']) row[b] = r[b] === true;
+    // Planilha ainda sem a coluna (Code.gs antigo) → sem data; o app mostra "aguardando" sem contador.
+    row.aguardandoEm = String(r.aguardandoEm || '');
   }
   row.excluido = r.excluido === true;
   row.atualizadoEm = Number(r.atualizadoEm) || 0;

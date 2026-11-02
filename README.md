@@ -177,7 +177,33 @@ Sempre que o `Code.gs` mudar:
 A URL `/exec` **continua a mesma** — nada muda nos aparelhos. Atenção: **Nova implantação**
 cria uma URL diferente; use sempre "Gerenciar implantações → Editar".
 
-### 1.9 Problemas comuns
+### 1.9 Quando uma versão nova acrescenta coluna (ex.: `aguardandoEm`, cache v3)
+
+Algumas versões do app gravam um campo novo na planilha. Nesses casos, **atualize o Apps Script
+antes de publicar o app** — nesta ordem:
+
+1. Abra a planilha → **Extensões → Apps Script**.
+2. Cole o `apps-script/Code.gs` novo inteiro (substituindo tudo) e **salve** (Ctrl+S).
+3. No seletor de função, escolha **`setupSheets`** → **Executar**. Ela só **acrescenta** as colunas
+   que faltam no fim da aba (aqui: `aguardandoEm` em `pendencias`), sem mexer nos dados; rodar de
+   novo não duplica nada. Confira no registro: `Aba "pendencias": colunas criadas: aguardandoEm.`
+4. *(Opcional)* Rode **`testarApi`** → "Todos os testes passaram".
+5. **Implantar → Gerenciar implantações → lápis (Editar) → Versão: Nova versão → Implantar**
+   (mesma URL, passo 1.8).
+6. Só então publique o app (seção 5.4: commit + push com o cache novo).
+
+Por que nessa ordem:
+
+- Entre o passo 2 e o 5, a implantação no ar continua sendo a **antiga** (implantações são
+  versões congeladas), e ela convive bem com a coluna a mais. Nada quebra para os aparelhos.
+- O código novo **sem** o passo 3 recusa as chamadas com "sem a(s) coluna(s): aguardandoEm. Rode
+  setupSheets()" — por isso o `setupSheets` vem antes da nova versão.
+- Se o app novo fosse publicado antes do Apps Script, a planilha ainda não guardaria o campo novo
+  (a data de "aguardando" se perderia na sincronização).
+- Aparelhos que ainda estão com o app antigo (antes de tocar em "Atualizar") **não apagam** o
+  campo novo: o Apps Script mantém o valor de qualquer coluna que não venha no envio.
+
+### 1.10 Problemas comuns
 
 | Resposta / sintoma | Causa e solução |
 |---|---|
@@ -210,7 +236,7 @@ IndexedDB, `crypto.randomUUID` e `navigator.storage.persist()` funcionam como em
 - Os dados ficam no IndexedDB **deste navegador, nesta origem** (`localhost:8137`). Outra porta
   ou outro navegador = outra base, vazia.
 - Para zerar os dados de teste: **Configurações → Armazenamento → Apagar dados deste aparelho**
-  (limpa pendências, observações, tags, fila de envio e o cursor de sincronização; mantém URL,
+  (limpa pendências, etapas, tags, fila de envio e o cursor de sincronização; mantém URL,
   token e preferências).
 - O teste no celular é feito pelo GitHub Pages (seção 6).
 - **Service worker:** depois da primeira visita, o app passa a abrir do cache, inclusive em
@@ -277,7 +303,7 @@ conteúdo e o indicador "Sincronizado".
 **4. Conferir a planilha**
 - `pendencias`: `tags` com ids separados por `;`; `foco/feito/aguardando/excluido` em
   TRUE/FALSE; `atualizadoEm` e `servidorEm` em milissegundos.
-- `observacoes`: crie uma observação "ok algo" em A → linha com `tipo = ok`.
+- `observacoes` (as "Etapas" do app): crie uma etapa "ok algo" em A → linha com `tipo = ok`.
 - `tags`: crie/renomeie uma tag em A → aparece em B com a mesma cor.
 
 **5. Apagar dados com fila pendente**
@@ -358,7 +384,8 @@ O arquivo `.nojekyll` (vazio) faz o GitHub Pages servir os arquivos como estão,
 
 ### 5.4 Publicar uma atualização
 
-1. Faça as mudanças.
+1. Faça as mudanças. **Se a versão mudou o `apps-script/Code.gs`** (ex.: coluna nova), atualize o
+   Apps Script **antes** do push — passo 1.9.
 2. **Aumente a versão do cache em `sw.js`**: `const VERSAO = 'v1';` → `'v2'` (depois `'v3'`…).
    Sem isso, os aparelhos continuam usando a versão antiga em cache.
    Se criou um arquivo novo (um módulo JS, por exemplo), acrescente-o à lista `SHELL` do `sw.js`.
@@ -399,7 +426,7 @@ O arquivo `.nojekyll` (vazio) faz o GitHub Pages servir os arquivos como estão,
 
 **Teclado e toque**
 10. Na captura, digite um texto e toque na tecla **Enviar** do teclado virtual: o item é criado.
-11. Abra um item, escreva uma observação e toque em **Enviar**: a observação entra.
+11. Abra um item, escreva uma etapa e toque em **Enviar**: a etapa entra.
 12. **Arraste por toque**: segure uma linha ~300 ms (vibra de leve) e arraste — dentro de um grupo
     e dentro do "Em foco". Solte e confira a ordem; reabra o app: a ordem continua.
 13. Deslizar rápido sobre a lista **rola** a página (não arrasta).

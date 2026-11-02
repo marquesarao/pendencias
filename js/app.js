@@ -12,18 +12,20 @@ import { arrastavel } from './ui/drag.js';
 import { toast } from './ui/toast.js';
 import { ajustarAltura } from './ui/row.js';
 import { h, reduzirMovimento } from './ui/dom.js';
-import { chaveDia } from './util.js';
+import { chaveDia, FILTRO_AGUARDANDO } from './util.js';
 
 const ler = (k, padrao) => { try { return localStorage.getItem(k) ?? padrao; } catch (_) { return padrao; } };
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
 
 const ui = {
-  filtro: null,                       // id da tag filtrada
+  filtro: null,                       // id da tag filtrada, ou FILTRO_AGUARDANDO
   modo: ler('pend.modo', 'agrupar'),  // 'agrupar' | 'corrida'
   tema: ler('pend.tema', 'auto'),     // 'auto' | 'claro' | 'escuro'
   aberto: null,                       // id do item expandido
   selecionado: null,                  // id do item selecionado pelo teclado/clique
   confirmarExclusao: null,
+  editandoTitulo: null,               // id do item com o título em edição (lápis)
+  tagsAbertas: null,                  // id do item com a lista completa de tags aberta
   buscando: false, termo: '', termoBruto: '',
   painel: null,
   armazenamento: 'verificando',       // 'verificando' | 'persistente' | 'nao' | 'indisponivel'
@@ -50,11 +52,17 @@ let agendado = false;
 
 function render() {
   agendado = false;
-  if (ui.filtro && !store.tagAtiva(ui.filtro)) ui.filtro = null;
+  const abertas = store.pendenciasAtivas().filter(p => !p.feito);
+  if (ui.filtro === FILTRO_AGUARDANDO) {
+    if (!abertas.some(p => p.aguardando)) ui.filtro = null; // o chip some quando não há mais nada aguardando
+  } else if (ui.filtro && !store.tagAtiva(ui.filtro)) {
+    ui.filtro = null;
+  }
   const aberto = ui.aberto && store.dados.pendencias.get(ui.aberto);
   if (!aberto || aberto.excluido) ui.aberto = null;
+  if (ui.editandoTitulo !== ui.aberto) ui.editandoTitulo = null;
+  if (ui.tagsAbertas !== ui.aberto) ui.tagsAbertas = null;
 
-  const abertas = store.pendenciasAtivas().filter(p => !p.feito);
   renderizarChips($('chips'), abertas, ui.filtro);
   ordemTela = renderizarLista(ui);
   if (ui.selecionado && !ordemTela.includes(ui.selecionado)) ui.selecionado = null;
@@ -105,14 +113,16 @@ function alternarFoco(id) {
 }
 
 // Único ponto que abre/recolhe itens (só um aberto por vez). Antes de recolher, grava o título
-// que estiver sendo editado — o campo sai da tela sem disparar "change".
+// que estiver sendo editado no cabeçalho — o campo some sem disparar "change".
 function definirAberto(id, { focarObs = false } = {}) {
-  if (ui.aberto && ui.aberto !== id) {
-    const ta = linhaEl(ui.aberto)?.querySelector('.d-title');
+  if (ui.aberto && ui.aberto !== id && ui.editandoTitulo === ui.aberto) {
+    const ta = linhaEl(ui.aberto)?.querySelector('.title-edit');
     if (ta) salvarTitulo(ta);
   }
   ui.aberto = id;
   ui.confirmarExclusao = null;
+  ui.editandoTitulo = null;
+  ui.tagsAbertas = null;
   if (id) ui.selecionado = id;
   render();
   if (id && focarObs) linhaEl(id)?.querySelector('[data-campo="obs"]')?.focus();
@@ -126,8 +136,10 @@ function criarDaCaptura() {
   const texto = captura.value.trim();
   if (!texto) return;
   const r = interpretarCaptura(texto, store.tagsAtivas());
-  const tags = r.tagId ? [r.tagId] : (!r.tagInexistente && ui.filtro ? [ui.filtro] : []);
-  const p = store.criarPendencia({ titulo: r.titulo, tags });
+  const filtroTag = ui.filtro && ui.filtro !== FILTRO_AGUARDANDO ? ui.filtro : null;
+  const tags = r.tagId ? [r.tagId] : (!r.tagInexistente && filtroTag ? [filtroTag] : []);
+  // Com o filtro "Aguardando" ativo, o item novo já nasce aguardando (fica visível no filtro).
+  const p = store.criarPendencia({ titulo: r.titulo, tags, aguardando: ui.filtro === FILTRO_AGUARDANDO });
   captura.value = '';
   render();
   animar(p.id, 'anim-entrou');
@@ -147,7 +159,7 @@ function criarDaCaptura() {
         },
       },
     });
-  } else if (ui.filtro && !tags.includes(ui.filtro)) {
+  } else if (filtroTag && !tags.includes(filtroTag)) {
     const tag = store.tagAtiva(tags[0]);
     toast(`Criada em “${tag ? tag.nome : 'Sem tag'}”, fora do filtro atual.`, {
       acao: { rotulo: 'Ver todas', fn: () => { ui.filtro = null; render(); } },
@@ -162,6 +174,25 @@ function salvarTitulo(ta) {
   const novo = ta.value.replace(/\s+/g, ' ').trim();
   if (!novo) { ta.value = p.titulo; ajustarAltura(ta); return; }
   if (novo !== p.titulo) store.editarPendencia(id, { titulo: novo });
+}
+
+// Lápis: o título vira campo no mesmo lugar. Enter ou sair do campo salva; Esc cancela.
+function editarTitulo(id) {
+  ui.editandoTitulo = id;
+  render();
+  const ta = linhaEl(id)?.querySelector('.title-edit');
+  if (!ta) return;
+  ajustarAltura(ta);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
+function terminarEdicaoTitulo(ta, salvar) {
+  const p = store.dados.pendencias.get(ta.closest('.row')?.dataset.id);
+  if (salvar) salvarTitulo(ta);
+  else if (p) ta.value = p.titulo;
+  ui.editandoTitulo = null;
+  render();
 }
 
 function alternarTag(id, tagId) {
@@ -201,15 +232,26 @@ main.addEventListener('click', e => {
     case 'foco': return alternarFoco(id);
     case 'abrir': return alternarAberto(id);
     case 'fechar': return definirAberto(null);
+    case 'editar-titulo': return editarTitulo(id);
+    case 'tags-expandir':
+      ui.tagsAbertas = id;
+      render();
+      linhaEl(id)?.querySelector('.tags-lista .chip-tag')?.focus();
+      return;
+    case 'tags-recolher':
+      ui.tagsAbertas = null;
+      render();
+      linhaEl(id)?.querySelector('.chip-mais')?.focus();
+      return;
     case 'obs-alternar': store.alternarObservacao(alvo.closest('[data-obs]').dataset.obs); break;
     case 'obs-excluir': {
       const obsId = alvo.closest('[data-obs]').dataset.obs;
       store.excluirObservacao(obsId);
-      toast('Observação excluída.', { acao: { rotulo: 'Desfazer', fn: () => store.excluirObservacao(obsId, false) } });
+      toast('Etapa excluída.', { acao: { rotulo: 'Desfazer', fn: () => store.excluirObservacao(obsId, false) } });
       break;
     }
     case 'tag-alternar': alternarTag(id, alvo.dataset.tag); break;
-    case 'aguardando': store.editarPendencia(id, { aguardando: !store.dados.pendencias.get(id).aguardando }); break;
+    case 'aguardando': store.alternarAguardando(id); break;
     case 'limpar-prazo': store.editarPendencia(id, { prazo: '' }); break;
     case 'excluir': ui.confirmarExclusao = id; break;
     case 'excluir-nao': ui.confirmarExclusao = null; break;
@@ -228,22 +270,33 @@ main.addEventListener('click', e => {
 });
 
 main.addEventListener('input', e => {
-  if (e.target.matches('.d-title')) ajustarAltura(e.target);
+  if (e.target.matches('.title-edit')) ajustarAltura(e.target);
+});
+
+// Sair do campo do título (tocar fora, Tab, Enter) salva.
+main.addEventListener('focusout', e => {
+  if (e.target.matches('.title-edit') && ui.editandoTitulo) terminarEdicaoTitulo(e.target, true);
 });
 
 main.addEventListener('change', e => {
   const t = e.target;
   const id = t.closest('.row')?.dataset.id;
   if (!id) return;
-  if (t.matches('.d-title')) salvarTitulo(t);
   if (t.matches('[data-campo="prazo"]')) { store.editarPendencia(id, { prazo: t.value || '' }); t.blur(); }
 });
 
 main.addEventListener('keydown', e => {
   const t = e.target;
-  if (t.matches('.d-title') && e.key === 'Enter') {
-    e.preventDefault();
-    t.blur(); // dispara o change
+  if (t.matches('.title-edit')) {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      t.blur(); // o focusout salva
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation(); // Esc aqui só cancela a edição, não recolhe o item
+      terminarEdicaoTitulo(t, false);
+      linhaEl(t.closest('.row').dataset.id)?.querySelector('.editar')?.focus();
+    }
   }
   // Linha focada com Tab: Enter/espaço abre ou recolhe (é um botão para leitores de tela).
   if (t.matches('.line-main') && (e.key === 'Enter' || e.key === ' ')) {
@@ -264,7 +317,7 @@ main.addEventListener('submit', e => {
     input.value = '';
     render();
   } catch (err) {
-    avisarErro('Não foi possível criar a observação', err);
+    avisarErro('Não foi possível criar a etapa', err);
   }
 });
 
@@ -310,10 +363,16 @@ document.addEventListener('pointerdown', () => document.body.classList.remove('t
 // trocado os elementos no meio do caminho. Avisos, painéis e botões do topo não recolhem.
 document.addEventListener('click', e => {
   if (!ui.aberto) return;
-  const dentro = e.composedPath().some(n => n instanceof Element && (
+  const caminho = e.composedPath().filter(n => n instanceof Element);
+  const dentro = caminho.some(n =>
     (n.classList.contains('row') && n.dataset.id === ui.aberto) ||
-    n.matches('.toasts, dialog, .tools, .sync')));
-  if (!dentro) definirAberto(null);
+    n.matches('.toasts, dialog, .tools, .sync'));
+  if (!dentro) return definirAberto(null);
+  // Lista completa de tags aberta: tocar fora dela (mesmo dentro do item) recolhe a lista.
+  if (ui.tagsAbertas && !caminho.some(n => n.matches('.d-tags, .toasts, dialog'))) {
+    ui.tagsAbertas = null;
+    render();
+  }
 });
 
 document.addEventListener('keydown', e => {
@@ -331,6 +390,13 @@ document.addEventListener('keydown', e => {
       } else {
         t.blur();
       }
+      return;
+    }
+    if (ui.tagsAbertas) { // Esc em camadas: primeiro a lista de tags, depois o item
+      const id = ui.tagsAbertas;
+      ui.tagsAbertas = null;
+      render();
+      linhaEl(id)?.querySelector('.chip-mais')?.focus();
       return;
     }
     if (ui.aberto) { const id = ui.aberto; definirAberto(null); selecionar(id); return; }

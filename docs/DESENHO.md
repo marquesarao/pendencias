@@ -45,7 +45,7 @@ README.md, .gitignore
 
 | Aba | Colunas |
 |---|---|
-| `pendencias` | id, titulo, tags, foco, feito, feitoEm, prazo, aguardando, ordem, criadoEm, atualizadoEm, excluido, **servidorEm** |
+| `pendencias` | id, titulo, tags, foco, feito, feitoEm, prazo, aguardando, **aguardandoEm**, ordem, criadoEm, atualizadoEm, excluido, **servidorEm** |
 | `observacoes` | id, pendenciaId, data, tipo, texto, ordem, atualizadoEm, excluido, **servidorEm** |
 | `tags` | id, nome, cor, ordem, atualizadoEm, excluido, **servidorEm** |
 
@@ -68,7 +68,7 @@ IndexedDB imediatamente.
 
 | Store | Chave | Conteúdo |
 |---|---|---|
-| `pendencias` | `id` | `{id, titulo, tags:[id…], foco, feito, feitoEm, prazo, aguardando, ordem, criadoEm, atualizadoEm, excluido}` |
+| `pendencias` | `id` | `{id, titulo, tags:[id…], foco, feito, feitoEm, prazo, aguardando, aguardandoEm, ordem, criadoEm, atualizadoEm, excluido}` |
 | `observacoes` | `id` (índice `pendenciaId`) | `{id, pendenciaId, data, tipo, texto, ordem, atualizadoEm, excluido}` |
 | `tags` | `id` | `{id, nome, cor, ordem, atualizadoEm, excluido}` |
 | `outbox` | `"tabela:id"` | `{table, row}` — foto completa e mais recente da linha |
@@ -90,7 +90,9 @@ IndexedDB imediatamente.
 - **Concluir:** `feito=true`, `feitoEm=agora`, `foco=false`. Fica riscado na lista enquanto
   `feitoEm` for hoje (fuso local); depois aparece só em Concluídas.
 - **Reabrir:** `feito=false`, `feitoEm=""` (foco não volta).
-- **Excluir pendência:** `excluido=true`; observações ficam órfãs e são ignoradas (sem cascata).
+- **Termo:** na interface as observações se chamam **Etapas**. Dados, abas, colunas e stores
+  continuam `observacoes` (sem mudança de esquema).
+- **Excluir pendência:** `excluido=true`; etapas ficam órfãs e são ignoradas (sem cascata).
 - **Excluir tag:** `excluido=true` na tag + remove o id dela de cada item (cada item vira uma op).
   Ids de tags inexistentes/excluídas são ignorados na tela.
 - **Captura com prefixo:** regex `^([^:/]{1,24}):\s*(.+)$`, comparação sem maiúsculas/acentos
@@ -98,7 +100,9 @@ IndexedDB imediatamente.
   com o **texto original completo** e mostra "Tag 'X' não existe · Criar tag X"; ao aceitar,
   cria a tag, vincula e remove o prefixo do título.
 - **Captura sem prefixo:** se há filtro de tag ativo, nasce com essa tag; senão, sem tag.
-- **Observação:** começa com `ok ` ou `✓ ` → `tipo=ok` (prefixo removido); senão `falta`.
+- **Etapa:** começa com `ok ` ou `✓ ` → `tipo=ok` (prefixo removido); senão `falta`.
+- **Aguardando:** ligar grava `aguardandoEm` = agora (ISO); desligar limpa. Itens marcados antes
+  da coluna existir (sem data) aparecem como "aguardando" sem contador.
   Clique no ícone alterna. Data automática (exibida dd/mm).
 
 ## 4. Protocolo de sincronização
@@ -241,7 +245,10 @@ Configurações com a mensagem) · Só local (sem URL/token).
 - Modo **Lista corrida**: todas as tags na linha (até 2 + "+n").
 - **Filtro de tag ativo** → lista corrida, sem cabeçalhos (mostra itens com a tag em qualquer
   posição).
-- Chips: "Todas" + uma por tag, com contagem de abertas.
+- Chips: "Todas" + **"Aguardando"** (só quando há itens aguardando; some e o filtro se desfaz
+  quando não houver mais) + uma por tag, com contagem de abertas. O filtro "Aguardando" usa lista
+  corrida e segue o padrão dos chips de tag na cor do aguardando (violeta). Com ele ativo, item
+  criado na captura já nasce aguardando.
 - Estados vazios convidativos ("Nada em foco. Toque na estrela de um item").
 
 ### Painéis
@@ -266,13 +273,48 @@ Configurações com a mensagem) · Só local (sem URL/token).
 - Captura recebe o foco ao abrir no desktop (não no celular, para não abrir o teclado).
   `↓` com a captura vazia desce para a lista.
 - Concluídas de hoje ficam no fim da própria zona, riscadas (cor `--done`); não são arrastáveis.
-- Indicador de observações: total, ou "feitas/total" quando há feitas e em aberto.
+- Indicador de etapas na linha recolhida: ícone de lista + "feitas/total" (ex.: 1/3).
+- Indicador de aguardando: "aguardando · hoje" / "aguardando · 3 d" (dias de calendário desde
+  `aguardandoEm`); a partir de **7 dias** no tom de alerta (`--danger`, o mesmo do prazo vencido),
+  para lembrar de cobrar. Sem data: só "aguardando".
 - Arraste: mouse arrasta de qualquer ponto da linha após 5 px (clique continua sendo clique);
   toque exige segurar ~300 ms (deslizar rápido continua rolando). Tags: arraste pela alça.
 - "Desfazer" no aviso após excluir pendência e após excluir observação.
 - Item criado fora do filtro ativo (prefixo de outra tag) → aviso com "Ver todas".
 - Busca filtra também o "Em foco"; achado só em observação mostra o trecho na linha.
 - Abrir pelo teclado (`Enter`) põe o cursor em "nova observação".
+
+### Item aberto: layout
+
+```
+[☐] título do item (toque = recolher)          [✎] [☆] [⌃]
+    ETAPAS 1/2
+    ┌───────────────────────────────────────────────┐  bloco rebaixado (--sunken),
+    │ ○ texto da etapa que ocupa a largura toda   × │  raio 10px, divisória fina
+    │ ✓ etapa feita                                × │  entre linhas
+    │ + Nova etapa…  ("ok …" = já feita)            │  ← última linha do bloco
+    └───────────────────────────────────────────────┘
+    ─────────────────────────────────────────────────
+    TAGS
+    (✓ Sekurit 1) (✓ Randon 2) (+ Tag)
+    ─────────────────────────────────────────────────
+    [Prazo dd/mm/aaaa] [◷ Aguardando desde 02/11]
+    ─────────────────────────────────────────────────
+                                    🗑 Excluir pendência
+```
+
+- Ordem: cabeçalho → ETAPAS → TAGS → Prazo/Aguardando → Excluir. Divisória fina entre seções;
+  respiro de 16 px (desktop) / 20 px (celular). Rótulos alinhados com o conteúdo.
+- **Título:** aparece uma vez só, no cabeçalho. O lápis (`aria-label` "Editar título", 44 × 48 px
+  no celular) troca o título por um campo no mesmo lugar, com a mesma fonte; Enter ou sair do
+  campo salva; Esc cancela (e não recolhe o item). Tocar no título (fora do lápis) recolhe.
+- **Etapas:** linha = [○/✓] [texto] [×]; a data (`data`) continua gravada e aparece só como
+  dica ao passar o mouse ("Anotada em 02/11"). Cabeçalho "ETAPAS" + contador "feitas/total"
+  (sem etapas: só o cabeçalho e o campo).
+- **Tags compactas:** só as marcadas (estilo selecionado, com número de ordem se 2+) + "+ Tag".
+  "+ Tag" (ou tocar numa tag marcada) abre a lista completa no lugar; "Concluir", tocar fora da
+  lista ou Esc recolhem. Sem tags marcadas: só "+ Tag".
+- Botão "Aguardando" mostra "Aguardando desde dd/mm" quando ativo e com data.
 
 ### Item aberto: como recolher
 
@@ -437,5 +479,9 @@ foco de teclado usam o acento):
   confirmação e contagem da fila; pergunta na primeira conexão com dados locais.
 - 2026-11-02 — Fatia 5: PWA (seção 5b). Acessibilidade: a área do título da linha virou
   `role="button"` focável (Enter/espaço abre e recolhe), corrigindo `aria-expanded` sem papel.
+- 2026-11-02 — Ajustes consolidados (cache v3): título editável no cabeçalho (lápis), "Etapas"
+  na interface com bloco rebaixado e sem data na frente, tags compactas com "+ Tag", ritmo
+  vertical do item aberto, `aguardandoEm` (coluna nova, aditiva) com contador "· N d" e alerta
+  a partir de 7 dias, chip de filtro "Aguardando". Token novo `--sunken`/`--sunken-line`.
 - 2026-11-02 — Ajuste visual: seletores de tag com a cor da própria tag (seção "Paleta" →
   "Seletores de tag"); foco de teclado preservado ao alternar. Cache do SW: v1 → v2.

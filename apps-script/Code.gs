@@ -17,8 +17,10 @@
 /** @OnlyCurrentDoc */
 
 const TABELAS = {
+  // aguardandoEm: acrescentada depois (planilhas antigas recebem a coluna no fim via setupSheets;
+  // as colunas são localizadas pelo nome, então a posição não importa).
   pendencias: ['id', 'titulo', 'tags', 'foco', 'feito', 'feitoEm', 'prazo', 'aguardando',
-    'ordem', 'criadoEm', 'atualizadoEm', 'excluido', 'servidorEm'],
+    'aguardandoEm', 'ordem', 'criadoEm', 'atualizadoEm', 'excluido', 'servidorEm'],
   observacoes: ['id', 'pendenciaId', 'data', 'tipo', 'texto', 'ordem', 'atualizadoEm',
     'excluido', 'servidorEm'],
   tags: ['id', 'nome', 'cor', 'ordem', 'atualizadoEm', 'excluido', 'servidorEm'],

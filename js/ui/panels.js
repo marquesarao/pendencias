@@ -279,7 +279,7 @@ function secaoSincronizacao() {
   const pergunta = pv
     ? h('div', { class: 'card card-alerta', role: 'alertdialog', 'aria-label': 'Primeira sincronização' },
       h('p', {}, h('strong', { text: `Este aparelho tem ${plural(pv.n, 'item', 'itens')} que nunca ${pv.n === 1 ? 'foi sincronizado' : 'foram sincronizados'}.` }),
-        ' (Pendências, observações e tags.)'),
+        ' (Pendências, etapas e tags.)'),
       h('div', { class: 'botoes' },
         h('button', { class: 'btn btn-primary btn-sm', type: 'button', 'data-act': 'primeira-enviar', text: 'Enviar para a planilha' }),
         h('button', { class: 'btn btn-danger btn-sm', type: 'button', 'data-act': 'primeira-baixar', text: 'Apagar e baixar da planilha' }),
@@ -342,7 +342,7 @@ function blocoApagar() {
   return h('div', { class: 'card-alerta', role: 'alertdialog', 'aria-label': 'Apagar dados deste aparelho' },
     h('p', {},
       h('strong', { text: 'Apagar tudo deste aparelho?' }),
-      ' Pendências, observações, tags e fila de envio. A planilha não é afetada.',
+      ' Pendências, etapas, tags e fila de envio. A planilha não é afetada.',
       sync.configurado() ? ' Como este aparelho está conectado, o conteúdo da planilha é baixado de novo em seguida.' : null,
       n ? h('strong', { class: 'texto-perigo', text: ` ${plural(n, 'alteração ainda não sincronizada será perdida', 'alterações ainda não sincronizadas serão perdidas')}.` }) : null),
     h('div', { class: 'botoes' },

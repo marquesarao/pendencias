@@ -3,7 +3,7 @@
 import { h, icone, reconciliar, contem } from './dom.js';
 import { criarLinha, atualizarLinha, ajustarAltura } from './row.js';
 import { pendenciasAtivas, tagsDe, tagsAtivas, observacoesDe } from '../store.js';
-import { ehHoje } from '../util.js';
+import { ehHoje, FILTRO_AGUARDANDO } from '../util.js';
 
 const linhas = new Map(); // id → elemento (reaproveitado entre renders)
 const grupos = new Map(); // chave → { el, zona, cab }
@@ -38,7 +38,8 @@ export function renderizarLista(ui) {
   const termo = ui.buscando ? ui.termo : '';
   const naLista = pendenciasAtivas().filter(p => !p.feito || ehHoje(p.feitoEm));
   let visiveis = naLista;
-  if (ui.filtro) visiveis = visiveis.filter(p => p.tags.includes(ui.filtro));
+  if (ui.filtro === FILTRO_AGUARDANDO) visiveis = visiveis.filter(p => p.aguardando);
+  else if (ui.filtro) visiveis = visiveis.filter(p => p.tags.includes(ui.filtro));
   if (termo) visiveis = visiveis.filter(p => corresponde(p, termo));
 
   const foco = visiveis.filter(p => p.foco).sort(abertasPrimeiro);
@@ -48,7 +49,8 @@ export function renderizarLista(ui) {
 
   const opcoes = (p, ocultarPrimeiraTag) => ({
     ocultarPrimeiraTag, termo, aberto: ui.aberto === p.id, selecionado: ui.selecionado === p.id,
-    confirmar: ui.confirmarExclusao === p.id,
+    confirmar: ui.confirmarExclusao === p.id, editandoTitulo: ui.editandoTitulo === p.id,
+    tagsAbertas: ui.tagsAbertas === p.id,
   });
   const montar = (lista, ocultar) => lista.map(p => {
     const el = linhaDe(p.id);
@@ -97,7 +99,7 @@ export function renderizarLista(ui) {
   const usados = new Set(ordemTela);
   for (const id of linhas.keys()) if (!usados.has(id)) linhas.delete(id);
 
-  document.querySelectorAll('.row.is-open .d-title').forEach(ajustarAltura);
+  document.querySelectorAll('.row.is-editing .title-edit').forEach(ajustarAltura);
   return ordemTela;
 }
 
@@ -123,6 +125,7 @@ function grupo(chave, nome, cor, itens, nos) {
 
 function mensagemVazia(ui, termo, totalNaLista, emFoco) {
   if (termo) return [icone('search'), h('span', {}, 'Nada encontrado para ', h('strong', { text: `“${ui.termoBruto}”` }), '.')];
+  if (ui.filtro === FILTRO_AGUARDANDO) return [icone('wait'), h('span', {}, emFoco ? 'O resto do que está aguardando está em foco.' : 'Nada aguardando.')];
   if (ui.filtro) return [icone('tag'), h('span', {}, emFoco ? 'O resto desta tag está em foco.' : 'Nada em aberto nesta tag.')];
   if (totalNaLista) return [icone('star'), h('span', {}, 'Tudo o que falta está em foco. Bom trabalho.')];
   return [icone('check'), h('span', {},
