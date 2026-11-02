@@ -14,6 +14,8 @@ export function criarLinha(id) {
       h('button', { class: 'check', type: 'button', role: 'checkbox', 'data-act': 'feito' },
         h('span', { class: 'check-box' }, icone('check'))),
       h('div', { class: 'line-main', 'data-act': 'abrir', role: 'button', tabindex: '0' },
+        // Celular: bolinhas na cor das tags no lugar do rótulo escrito (desktop: oculto).
+        h('span', { class: 'line-dots', role: 'img' }),
         h('span', { class: 'title' }, h('span', { class: 'title-text' })),
         h('span', { class: 'line-tags' }),
         h('span', { class: 'meta' })),
@@ -65,8 +67,16 @@ export function atualizarLinha(el, p, o) {
   const edit = el.querySelector('.title-edit');
   if (document.activeElement !== edit && edit.value !== p.titulo) edit.value = p.titulo;
 
+  // Bolinhas (celular): todas as tags do item, até 3, na ordem (a 1ª é a principal).
+  const todasDoItem = tagsDe(p);
+  const dots = el.querySelector('.line-dots');
+  dots.replaceChildren(...todasDoItem.slice(0, 3).map(t => h('span', { class: 'line-dot', 'data-cor': t.cor })));
+  if (todasDoItem.length) dots.setAttribute('aria-label', `Tags: ${todasDoItem.map(t => t.nome).join(', ')}`);
+  else dots.removeAttribute('aria-label');
+  dots.hidden = !todasDoItem.length;
+
   // Tags na linha
-  let tags = tagsDe(p);
+  let tags = todasDoItem;
   if (o.ocultarPrimeiraTag) tags = tags.slice(1);
   const chipsTag = tags.slice(0, MAX_TAGS_LINHA).map(t => h('span', { class: 'tag', 'data-cor': t.cor, text: t.nome }));
   if (tags.length > MAX_TAGS_LINHA) chipsTag.push(h('span', { class: 'tag tag-mais', text: `+${tags.length - MAX_TAGS_LINHA}` }));

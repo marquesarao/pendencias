@@ -377,7 +377,6 @@ function aoClicar(e) {
     case 'tag-excluir-sim': {
       const nome = store.dados.tags.get(id).nome;
       estado.confirmarTag = null;
-      if (ctx.ui.filtro === id) ctx.ui.filtro = null;
       store.excluirTag(id);
       toast(`Tag “${nome}” excluída.`);
       break;

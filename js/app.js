@@ -12,14 +12,27 @@ import { arrastavel } from './ui/drag.js';
 import { toast } from './ui/toast.js';
 import { ajustarAltura } from './ui/row.js';
 import { h, reduzirMovimento } from './ui/dom.js';
-import { chaveDia, FILTRO_AGUARDANDO } from './util.js';
+import { chaveDia, FILTRO_AGUARDANDO, filtrosVazios, temFiltro } from './util.js';
 
 const ler = (k, padrao) => { try { return localStorage.getItem(k) ?? padrao; } catch (_) { return padrao; } };
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+const guardarFiltros = () => guardar('pend.filtros', JSON.stringify(ui.filtros));
+
+// Filtros ativos lembrados por aparelho: { tags: [ids], aguardando: bool }.
+function lerFiltros() {
+  try {
+    const f = JSON.parse(ler('pend.filtros', 'null'));
+    if (f && Array.isArray(f.tags)) return { tags: f.tags.filter(t => typeof t === 'string'), aguardando: !!f.aguardando };
+  } catch (_) {}
+  return filtrosVazios();
+}
+
+// Modo padrão: lista corrida no celular, agrupada no desktop; a escolha do usuário fica salva.
+const MODO_PADRAO = matchMedia('(max-width: 600px)').matches ? 'corrida' : 'agrupar';
 
 const ui = {
-  filtro: null,                       // id da tag filtrada, ou FILTRO_AGUARDANDO
-  modo: ler('pend.modo', 'agrupar'),  // 'agrupar' | 'corrida'
+  filtros: lerFiltros(),              // { tags: [ids] (OU entre si), aguardando (E) }
+  modo: ler('pend.modo', MODO_PADRAO), // 'agrupar' | 'corrida'
   tema: ler('pend.tema', 'auto'),     // 'auto' | 'claro' | 'escuro'
   aberto: null,                       // id do item expandido
   selecionado: null,                  // id do item selecionado pelo teclado/clique
@@ -54,10 +67,11 @@ let agendado = false;
 function render() {
   agendado = false;
   const abertas = store.pendenciasAtivas().filter(p => !p.feito);
-  if (ui.filtro === FILTRO_AGUARDANDO) {
-    if (!abertas.some(p => p.aguardando)) ui.filtro = null; // o chip some quando não há mais nada aguardando
-  } else if (ui.filtro && !store.tagAtiva(ui.filtro)) {
-    ui.filtro = null;
+  const validas = ui.filtros.tags.filter(id => store.tagAtiva(id));
+  const aguardando = ui.filtros.aguardando && abertas.some(p => p.aguardando); // o chip some quando não há mais nada aguardando
+  if (validas.length !== ui.filtros.tags.length || aguardando !== ui.filtros.aguardando) {
+    ui.filtros = { tags: validas, aguardando };
+    guardarFiltros();
   }
   const aberto = ui.aberto && store.dados.pendencias.get(ui.aberto);
   if (!aberto || aberto.excluido) ui.aberto = null;
@@ -65,7 +79,7 @@ function render() {
   if (ui.tagsAbertas !== ui.aberto) ui.tagsAbertas = null;
   if (ui.editandoEtapa && store.dados.observacoes.get(ui.editandoEtapa)?.pendenciaId !== ui.aberto) ui.editandoEtapa = null;
 
-  renderizarChips($('chips'), abertas, ui.filtro);
+  renderizarChips($('chips'), abertas, ui.filtros);
   ordemTela = renderizarLista(ui);
   if (ui.selecionado && !ordemTela.includes(ui.selecionado)) ui.selecionado = null;
   for (const b of $('modo').children) b.setAttribute('aria-pressed', String(b.dataset.modo === ui.modo));
@@ -143,10 +157,12 @@ function criarDaCaptura() {
   const texto = captura.value.trim();
   if (!texto) return;
   const r = interpretarCaptura(texto, store.tagsAtivas());
-  const filtroTag = ui.filtro && ui.filtro !== FILTRO_AGUARDANDO ? ui.filtro : null;
-  const tags = r.tagId ? [r.tagId] : (!r.tagInexistente && filtroTag ? [filtroTag] : []);
+  // Sem prefixo, com tags no filtro: nasce com a PRIMEIRA tag ativa na ordem dos chips.
+  const tagsDoFiltro = store.tagsAtivas().filter(t => ui.filtros.tags.includes(t.id));
+  const herdada = !r.tagId && !r.tagInexistente && tagsDoFiltro.length ? tagsDoFiltro[0] : null;
+  const tags = r.tagId ? [r.tagId] : (herdada ? [herdada.id] : []);
   // Com o filtro "Aguardando" ativo, o item novo já nasce aguardando (fica visível no filtro).
-  const p = store.criarPendencia({ titulo: r.titulo, tags, aguardando: ui.filtro === FILTRO_AGUARDANDO });
+  const p = store.criarPendencia({ titulo: r.titulo, tags, aguardando: ui.filtros.aguardando });
   captura.value = '';
   render();
   animar(p.id, 'anim-entrou');
@@ -166,11 +182,13 @@ function criarDaCaptura() {
         },
       },
     });
-  } else if (filtroTag && !tags.includes(filtroTag)) {
+  } else if (ui.filtros.tags.length && !ui.filtros.tags.some(id => tags.includes(id))) {
     const tag = store.tagAtiva(tags[0]);
     toast(`Criada em “${tag ? tag.nome : 'Sem tag'}”, fora do filtro atual.`, {
-      acao: { rotulo: 'Ver todas', fn: () => { ui.filtro = null; render(); } },
+      acao: { rotulo: 'Ver todas', fn: () => { ui.filtros = filtrosVazios(); guardarFiltros(); render(); } },
     });
+  } else if (herdada && tagsDoFiltro.length > 1) {
+    toast(`Criada em “${herdada.nome}” (primeira tag do filtro).`);
   }
 }
 
@@ -246,8 +264,11 @@ function alternarTag(id, tagId) {
 main.addEventListener('click', e => {
   const chip = e.target.closest('[data-filtro]');
   if (chip) {
-    const id = chip.dataset.filtro || null;
-    ui.filtro = ui.filtro === id ? null : id;
+    const id = chip.dataset.filtro;
+    if (!id) ui.filtros = filtrosVazios();
+    else if (id === FILTRO_AGUARDANDO) ui.filtros.aguardando = !ui.filtros.aguardando;
+    else ui.filtros.tags = ui.filtros.tags.includes(id) ? ui.filtros.tags.filter(t => t !== id) : [...ui.filtros.tags, id];
+    guardarFiltros();
     ui.selecionado = null;
     return render();
   }
@@ -582,7 +603,8 @@ async function iniciar() {
 
   // Depois de apagar os dados deste aparelho: zera o estado da tela (filtro, item aberto, busca).
   const limparTela = () => {
-    Object.assign(ui, { filtro: null, aberto: null, selecionado: null, confirmarExclusao: null });
+    Object.assign(ui, { filtros: filtrosVazios(), aberto: null, selecionado: null, confirmarExclusao: null });
+    guardarFiltros();
     fecharBusca();
     render();
   };

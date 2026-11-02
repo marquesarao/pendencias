@@ -81,6 +81,16 @@ export function diasDesde(iso) {
 
 // Filtro especial "Aguardando" (ids de tag são UUIDs, então não colide).
 export const FILTRO_AGUARDANDO = ':aguardando';
+
+// Filtros ativos: { tags: [ids], aguardando: bool }. Entre tags vale "OU" (qualquer uma das
+// ativas); "Aguardando" combina com as tags por "E".
+export const filtrosVazios = () => ({ tags: [], aguardando: false });
+export const temFiltro = f => f.aguardando || f.tags.length > 0;
+export function passaNosFiltros(p, f) {
+  if (f.aguardando && !p.aguardando) return false;
+  if (f.tags.length && !p.tags.some(t => f.tags.includes(t))) return false;
+  return true;
+}
 export const DIAS_ALERTA_AGUARDANDO = 7;
 
 export function debounce(fn, ms) {

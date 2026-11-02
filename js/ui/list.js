@@ -3,7 +3,7 @@
 import { h, icone, reconciliar, contem } from './dom.js';
 import { criarLinha, atualizarLinha, ajustarAltura } from './row.js';
 import { pendenciasAtivas, tagsDe, tagsAtivas, observacoesDe } from '../store.js';
-import { ehHoje, FILTRO_AGUARDANDO } from '../util.js';
+import { ehHoje, temFiltro, passaNosFiltros } from '../util.js';
 
 const linhas = new Map(); // id → elemento (reaproveitado entre renders)
 const grupos = new Map(); // chave → { el, zona, cab }
@@ -38,13 +38,12 @@ export function renderizarLista(ui) {
   const termo = ui.buscando ? ui.termo : '';
   const naLista = pendenciasAtivas().filter(p => !p.feito || ehHoje(p.feitoEm));
   let visiveis = naLista;
-  if (ui.filtro === FILTRO_AGUARDANDO) visiveis = visiveis.filter(p => p.aguardando);
-  else if (ui.filtro) visiveis = visiveis.filter(p => p.tags.includes(ui.filtro));
+  if (temFiltro(ui.filtros)) visiveis = visiveis.filter(p => passaNosFiltros(p, ui.filtros));
   if (termo) visiveis = visiveis.filter(p => corresponde(p, termo));
 
   const foco = visiveis.filter(p => p.foco).sort(abertasPrimeiro);
   const resto = visiveis.filter(p => !p.foco).sort(abertasPrimeiro);
-  const agrupar = ui.modo === 'agrupar' && !ui.filtro && !termo;
+  const agrupar = ui.modo === 'agrupar' && !temFiltro(ui.filtros) && !termo;
   const ordemTela = [];
 
   const opcoes = (p, ocultarPrimeiraTag) => ({
@@ -62,11 +61,14 @@ export function renderizarLista(ui) {
   // Em foco
   const secFoco = document.getElementById('sec-foco');
   const zonaFoco = document.getElementById('foco');
-  const filtrando = !!(ui.filtro || termo);
+  const filtrando = temFiltro(ui.filtros) || !!termo;
   secFoco.hidden = filtrando && !foco.length;
+  secFoco.classList.toggle('is-vazio', !foco.length); // celular: vira uma linha fina
   document.getElementById('h-foco').dataset.n = foco.length || '';
   reconciliar(zonaFoco, foco.length ? montar(foco, false) : [vazio('foco', [
-    icone('star'), h('span', {}, 'Nada em foco. Toque na estrela de um item para trazê-lo para cá.'),
+    icone('star'),
+    h('span', { class: 'so-desktop', text: 'Nada em foco. Toque na estrela de um item para trazê-lo para cá.' }),
+    h('span', { class: 'so-celular', text: 'Nada em foco — toque na estrela de um item' }),
   ])]);
 
   // Todas
@@ -125,8 +127,12 @@ function grupo(chave, nome, cor, itens, nos) {
 
 function mensagemVazia(ui, termo, totalNaLista, emFoco) {
   if (termo) return [icone('search'), h('span', {}, 'Nada encontrado para ', h('strong', { text: `“${ui.termoBruto}”` }), '.')];
-  if (ui.filtro === FILTRO_AGUARDANDO) return [icone('wait'), h('span', {}, emFoco ? 'O resto do que está aguardando está em foco.' : 'Nada aguardando.')];
-  if (ui.filtro) return [icone('tag'), h('span', {}, emFoco ? 'O resto desta tag está em foco.' : 'Nada em aberto nesta tag.')];
+  if (temFiltro(ui.filtros)) {
+    const msg = emFoco ? 'O resto do que passa nos filtros está em foco.'
+      : ui.filtros.aguardando && !ui.filtros.tags.length ? 'Nada aguardando.'
+        : 'Nada em aberto com estes filtros.';
+    return [icone(ui.filtros.aguardando ? 'wait' : 'tag'), h('span', {}, msg)];
+  }
   if (totalNaLista) return [icone('star'), h('span', {}, 'Tudo o que falta está em foco. Bom trabalho.')];
   return [icone('check'), h('span', {},
     h('strong', { text: 'Tudo em dia. ' }), 'Escreva acima e tecle Enter para anotar uma pendência. ',

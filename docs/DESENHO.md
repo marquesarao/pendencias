@@ -243,13 +243,38 @@ Configurações com a mensagem) · Só local (sem URL/token).
   último); a 1ª tag não é repetida na linha (as demais aparecem). Arraste **só dentro do grupo**;
   arrastar nunca altera tags.
 - Modo **Lista corrida**: todas as tags na linha (até 2 + "+n").
-- **Filtro de tag ativo** → lista corrida, sem cabeçalhos (mostra itens com a tag em qualquer
-  posição).
-- Chips: "Todas" + **"Aguardando"** (só quando há itens aguardando; some e o filtro se desfaz
-  quando não houver mais) + uma por tag, com contagem de abertas. O filtro "Aguardando" usa lista
-  corrida e segue o padrão dos chips de tag na cor do aguardando (violeta). Com ele ativo, item
-  criado na captura já nasce aguardando.
+- **Filtros (seleção múltipla):** cada chip de tag liga/desliga; vários ao mesmo tempo. Entre
+  tags vale **OU** (itens com qualquer uma das tags ativas, em qualquer posição); **"Aguardando"**
+  combina com as tags por **E**. **"Todas"** limpa tudo e fica ativo quando nenhum filtro está
+  ligado. Com qualquer filtro ativo: lista corrida, sem cabeçalhos. Estado:
+  `ui.filtros = { tags: [ids], aguardando }`, lembrado no localStorage (`pend.filtros`); tags
+  excluídas saem do filtro; o filtro "Aguardando" se desfaz quando não houver mais nada aguardando.
+- Chips: "Todas" + **"Aguardando"** (só quando há itens aguardando) + uma por tag, com contagem de
+  abertas. Seleção na cor da tag (Aguardando: violeta).
+- **Captura com filtros ativos (sem prefixo):** 1 tag ativa → nasce com ela; 2+ → nasce com a
+  **primeira tag ativa na ordem dos chips** e o aviso diz qual ("Criada em “Randon” (primeira tag
+  do filtro)."). "Aguardando" ativo → nasce aguardando. Prefixo de outra tag → aviso "fora do
+  filtro atual" com "Ver todas".
+- **Modo padrão:** "Lista corrida" no celular (≤ 600 px), "Agrupar" no desktop; a escolha do
+  usuário fica salva por aparelho (`pend.modo`).
 - Estados vazios convidativos ("Nada em foco. Toque na estrela de um item").
+
+### Linha compacta no celular (≤ 600 px)
+
+Medido em 360 × 800 com 20 itens reais (2 em foco, 4 com etapas, 3 com prazo, 3 aguardando),
+contando linhas inteiras na primeira tela: **antes 7** (Agrupar, padrão) / 8 (Lista corrida) →
+**depois 12** (Lista corrida, novo padrão) / 9 (Agrupar).
+
+- Tag: bolinha de 9 px na cor da tag antes do título (até 3, na ordem; a 1ª é a principal),
+  `role="img"` com `aria-label` "Tags: …". O nome continua nos chips, cabeçalhos de grupo e item
+  aberto. No desktop, rótulo escrito como antes.
+- 2ª linha **só** com informação (etapas, prazo, aguardando); sem isso, uma linha só (44 px).
+- Título 14.5 px (um degrau abaixo), até 2 linhas e reticências. Checkbox e estrela 44 × 44 px;
+  linha ≥ 44 px.
+- Respiros acima da lista mais justos no celular (cabeçalho 52 px, captura 46 px, margens de
+  chips/seções menores, "Em foco" com padding 2 px).
+- "Em foco" vazio no celular: uma linha fina "☆ Nada em foco — toque na estrela de um item"
+  (sem o título da seção e sem o cartão).
 
 ### Painéis
 
@@ -490,6 +515,9 @@ foco de teclado usam o acento):
   confirmação e contagem da fila; pergunta na primeira conexão com dados locais.
 - 2026-11-02 — Fatia 5: PWA (seção 5b). Acessibilidade: a área do título da linha virou
   `role="button"` focável (Enter/espaço abre e recolhe), corrigindo `aria-expanded` sem papel.
+- 2026-11-02 — Parte A (cache v5): filtros com seleção múltipla (tags OU, Aguardando E, lembrados
+  por aparelho) e linha compacta no celular (bolinhas de tag, 2ª linha só com informação, título
+  menor, "Em foco" vazio em linha fina, Lista corrida como padrão no celular). Ver "Regras de lista".
 - 2026-11-02 — Editar o texto de uma etapa no lugar (cache v4). Ver "Item aberto: layout".
 - 2026-11-02 — Ajustes consolidados (cache v3): título editável no cabeçalho (lápis), "Etapas"
   na interface com bloco rebaixado e sem data na frente, tags compactas com "+ Tag", ritmo
