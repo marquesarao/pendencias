@@ -311,6 +311,17 @@ Configurações com a mensagem) · Só local (sem URL/token).
 - **Etapas:** linha = [○/✓] [texto] [×]; a data (`data`) continua gravada e aparece só como
   dica ao passar o mouse ("Anotada em 02/11"). Cabeçalho "ETAPAS" + contador "feitas/total"
   (sem etapas: só o cabeçalho e o campo).
+- **Editar uma etapa:** tocar no **texto** vira campo no mesmo lugar (mesma fonte/tamanho, cursor
+  no fim); ○/✓ só alterna feita/falta e × só exclui. Enter ("Enviar" no celular) ou sair do
+  campo salva; Esc cancela e **não** recolhe o item. Texto vazio ao salvar → volta ao original
+  com o aviso "Para remover a etapa, use o ×". O prefixo "ok " só vale na criação; na edição o
+  texto é gravado como digitado. Salvar = `editarObservacao` (novo `atualizadoEm`, entra na fila).
+  Uma etapa em edição por vez; tocar no texto de outra salva a atual e já abre a outra. Recolher
+  o item (tocar fora, ⌃, título, outro item) salva antes. Desktop: cursor de texto e contorno
+  fino (`--muted-ui`) no hover. Celular: o texto ocupa a altura toda da linha (alvo ≥ 44 px).
+- **Implementação:** as linhas de etapa são reaproveitadas por id (não recriadas a cada render),
+  para o campo não perder o foco quando chega uma sincronização e para o toque em outra etapa
+  não ser "engolido" quando a edição anterior salva e redesenha.
 - **Tags compactas:** só as marcadas (estilo selecionado, com número de ordem se 2+) + "+ Tag".
   "+ Tag" (ou tocar numa tag marcada) abre a lista completa no lugar; "Concluir", tocar fora da
   lista ou Esc recolhem. Sem tags marcadas: só "+ Tag".
@@ -479,6 +490,7 @@ foco de teclado usam o acento):
   confirmação e contagem da fila; pergunta na primeira conexão com dados locais.
 - 2026-11-02 — Fatia 5: PWA (seção 5b). Acessibilidade: a área do título da linha virou
   `role="button"` focável (Enter/espaço abre e recolhe), corrigindo `aria-expanded` sem papel.
+- 2026-11-02 — Editar o texto de uma etapa no lugar (cache v4). Ver "Item aberto: layout".
 - 2026-11-02 — Ajustes consolidados (cache v3): título editável no cabeçalho (lápis), "Etapas"
   na interface com bloco rebaixado e sem data na frente, tags compactas com "+ Tag", ritmo
   vertical do item aberto, `aguardandoEm` (coluna nova, aditiva) com contador "· N d" e alerta

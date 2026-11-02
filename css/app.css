@@ -590,7 +590,25 @@ body.teclado .row.is-selected > .line { box-shadow: inset 0 0 0 1.5px color-mix(
 .obs-tipo:hover svg { border-color: var(--accent); }
 .obs-ok .obs-tipo svg { background: var(--accent); border-color: var(--accent); stroke: var(--accent-ink); }
 .obs-ok .obs-texto { color: var(--text-2); }
-.obs-texto { overflow-wrap: anywhere; }
+/* Texto da etapa: tocar edita no lugar. Padding + margem negativa = área de toque maior sem mexer
+   no layout; no desktop, cursor de texto e contorno sutil no hover indicam que é editável. */
+.obs-texto {
+  overflow-wrap: anywhere;
+  margin: -3px -6px; padding: 3px 6px;
+  border-radius: 7px;
+  cursor: text;
+  transition: box-shadow .15s;
+}
+@media (hover: hover) { .obs-texto:hover { box-shadow: inset 0 0 0 1px var(--muted-ui); } }
+.obs-edit {
+  display: block; width: auto; min-width: 0;
+  margin: -3px -6px; padding: 2px 5px;
+  font: inherit; line-height: inherit; color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--accent); border-radius: 7px;
+  box-shadow: 0 0 0 3px var(--ring);
+  resize: none; overflow: hidden; outline: 0;
+}
 .obs-x {
   display: grid; place-items: center; width: 26px; height: 22px;
   color: var(--muted-ui); border-radius: 7px; opacity: 0;
@@ -940,6 +958,13 @@ body.arrastando-algo { cursor: grabbing; user-select: none; -webkit-user-select:
   .obs-tipo { width: 26px; height: 26px; }
   .obs-x { width: 32px; height: 28px; margin-top: -2px; }
   .obs-new { height: 46px; }
+  /* Alvo de toque confortável: o texto ocupa a altura toda da linha (≥ 44 px), sem sobrepor a
+     etapa vizinha; ○ e × alinhados à primeira linha do texto. */
+  .obs { padding: 0; }
+  .obs-texto { margin: 0 -6px; padding: 12px 6px; }
+  .obs-tipo { margin-top: 10px; }
+  .obs-x { margin-top: 8px; }
+  .obs-edit { margin: 8px -6px; padding: 3px 5px; }
   .pill, .link-danger, .btn-sm { height: 38px; }
 
   /* Painel como folha de baixo */

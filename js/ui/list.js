@@ -50,7 +50,7 @@ export function renderizarLista(ui) {
   const opcoes = (p, ocultarPrimeiraTag) => ({
     ocultarPrimeiraTag, termo, aberto: ui.aberto === p.id, selecionado: ui.selecionado === p.id,
     confirmar: ui.confirmarExclusao === p.id, editandoTitulo: ui.editandoTitulo === p.id,
-    tagsAbertas: ui.tagsAbertas === p.id,
+    tagsAbertas: ui.tagsAbertas === p.id, editandoEtapa: ui.editandoEtapa,
   });
   const montar = (lista, ocultar) => lista.map(p => {
     const el = linhaDe(p.id);
@@ -99,7 +99,7 @@ export function renderizarLista(ui) {
   const usados = new Set(ordemTela);
   for (const id of linhas.keys()) if (!usados.has(id)) linhas.delete(id);
 
-  document.querySelectorAll('.row.is-editing .title-edit').forEach(ajustarAltura);
+  document.querySelectorAll('.row.is-editing .title-edit, .obs-edit').forEach(ajustarAltura);
   return ordemTela;
 }
 

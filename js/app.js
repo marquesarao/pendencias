@@ -26,6 +26,7 @@ const ui = {
   confirmarExclusao: null,
   editandoTitulo: null,               // id do item com o título em edição (lápis)
   tagsAbertas: null,                  // id do item com a lista completa de tags aberta
+  editandoEtapa: null,                // id da etapa com o texto em edição (uma por vez)
   buscando: false, termo: '', termoBruto: '',
   painel: null,
   armazenamento: 'verificando',       // 'verificando' | 'persistente' | 'nao' | 'indisponivel'
@@ -62,6 +63,7 @@ function render() {
   if (!aberto || aberto.excluido) ui.aberto = null;
   if (ui.editandoTitulo !== ui.aberto) ui.editandoTitulo = null;
   if (ui.tagsAbertas !== ui.aberto) ui.tagsAbertas = null;
+  if (ui.editandoEtapa && store.dados.observacoes.get(ui.editandoEtapa)?.pendenciaId !== ui.aberto) ui.editandoEtapa = null;
 
   renderizarChips($('chips'), abertas, ui.filtro);
   ordemTela = renderizarLista(ui);
@@ -119,10 +121,15 @@ function definirAberto(id, { focarObs = false } = {}) {
     const ta = linhaEl(ui.aberto)?.querySelector('.title-edit');
     if (ta) salvarTitulo(ta);
   }
+  if (ui.editandoEtapa) {
+    const campo = main.querySelector('.obs-edit');
+    if (campo) salvarEtapa(campo);
+  }
   ui.aberto = id;
   ui.confirmarExclusao = null;
   ui.editandoTitulo = null;
   ui.tagsAbertas = null;
+  ui.editandoEtapa = null;
   if (id) ui.selecionado = id;
   render();
   if (id && focarObs) linhaEl(id)?.querySelector('[data-campo="obs"]')?.focus();
@@ -195,6 +202,37 @@ function terminarEdicaoTitulo(ta, salvar) {
   render();
 }
 
+// Etapa: tocar no texto edita no lugar. Enter ou sair do campo salva; Esc cancela.
+// Na edição o texto é gravado como digitado (o prefixo "ok " só vale na criação).
+function editarEtapa(obsId) {
+  ui.editandoEtapa = obsId;
+  render();
+  const campo = main.querySelector(`[data-obs="${CSS.escape(obsId)}"] .obs-edit`);
+  if (!campo) return;
+  ajustarAltura(campo);
+  campo.focus();
+  campo.setSelectionRange(campo.value.length, campo.value.length);
+}
+
+function salvarEtapa(campo) {
+  const id = campo.closest('[data-obs]')?.dataset.obs;
+  const etapa = id && store.dados.observacoes.get(id);
+  if (!etapa) return;
+  const novo = campo.value.replace(/\s+/g, ' ').trim();
+  if (!novo) {
+    campo.value = etapa.texto;
+    toast('Para remover a etapa, use o ×');
+    return;
+  }
+  if (novo !== etapa.texto) store.editarObservacao(id, novo); // atualizadoEm + fila de sincronização
+}
+
+function terminarEdicaoEtapa(campo, salvar) {
+  if (salvar) salvarEtapa(campo);
+  ui.editandoEtapa = null;
+  render();
+}
+
 function alternarTag(id, tagId) {
   const p = store.dados.pendencias.get(id);
   const tags = p.tags.includes(tagId) ? p.tags.filter(t => t !== tagId) : [...p.tags, tagId];
@@ -243,6 +281,7 @@ main.addEventListener('click', e => {
       render();
       linhaEl(id)?.querySelector('.chip-mais')?.focus();
       return;
+    case 'obs-editar': return editarEtapa(alvo.closest('[data-obs]').dataset.obs);
     case 'obs-alternar': store.alternarObservacao(alvo.closest('[data-obs]').dataset.obs); break;
     case 'obs-excluir': {
       const obsId = alvo.closest('[data-obs]').dataset.obs;
@@ -270,12 +309,17 @@ main.addEventListener('click', e => {
 });
 
 main.addEventListener('input', e => {
-  if (e.target.matches('.title-edit')) ajustarAltura(e.target);
+  if (e.target.matches('.title-edit, .obs-edit')) ajustarAltura(e.target);
 });
 
 // Sair do campo do título (tocar fora, Tab, Enter) salva.
 main.addEventListener('focusout', e => {
   if (e.target.matches('.title-edit') && ui.editandoTitulo) terminarEdicaoTitulo(e.target, true);
+  if (e.target.matches('.obs-edit') && ui.editandoEtapa) {
+    const proxima = e.relatedTarget?.matches?.('.obs-texto') ? e.relatedTarget.closest('[data-obs]').dataset.obs : null;
+    terminarEdicaoEtapa(e.target, true);
+    if (proxima) editarEtapa(proxima);
+  }
 });
 
 main.addEventListener('change', e => {
@@ -287,6 +331,24 @@ main.addEventListener('change', e => {
 
 main.addEventListener('keydown', e => {
   const t = e.target;
+  if (t.matches('.obs-edit')) {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      t.blur(); // o focusout salva
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation(); // Esc aqui só cancela a edição, não recolhe o item
+      const obsId = t.closest('[data-obs]').dataset.obs;
+      terminarEdicaoEtapa(t, false);
+      main.querySelector(`[data-obs="${CSS.escape(obsId)}"] .obs-texto`)?.focus();
+    }
+  }
+  // Texto da etapa focado com Tab: Enter/espaço começa a editar.
+  if (t.matches('.obs-texto') && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    e.stopPropagation();
+    editarEtapa(t.closest('[data-obs]').dataset.obs);
+  }
   if (t.matches('.title-edit')) {
     if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();

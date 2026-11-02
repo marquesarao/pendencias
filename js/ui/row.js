@@ -1,7 +1,7 @@
 // Linha compacta da pendência e o detalhe expandido no lugar (sem modal).
 // Na interface as "observações" se chamam "Etapas" (dados continuam em "observacoes").
 
-import { h, icone, realcar, trecho, contem } from './dom.js';
+import { h, icone, realcar, trecho, contem, reconciliar } from './dom.js';
 import { tagsDe, tagsAtivas, observacoesDe } from '../store.js';
 import { ddmm, situacaoPrazo, rotuloPrazo, diasDesde, DIAS_ALERTA_AGUARDANDO } from '../util.js';
 
@@ -38,7 +38,7 @@ function textoEspera(p) {
  * @param {HTMLElement} el
  * @param {object} p pendência
  * @param {object} o { ocultarPrimeiraTag, termo (normalizado), aberto, selecionado, confirmar,
- *                     editandoTitulo, tagsAbertas }
+ *                     editandoTitulo, tagsAbertas, editandoEtapa (id da etapa em edição) }
  */
 export function atualizarLinha(el, p, o) {
   el.classList.toggle('is-done', p.feito);
@@ -129,15 +129,15 @@ function criarDetalhe() {
 function atualizarDetalhe(det, p, etapas, feitas, o) {
   // ETAPAS
   det.querySelector('.d-cont').textContent = etapas.length ? `${feitas}/${etapas.length}` : '';
-  det.querySelector('.obs-list').replaceChildren(...etapas.map(x => h('li', {
-    class: `obs obs-${x.tipo}`, 'data-obs': x.id, title: `Anotada em ${ddmm(x.data)}`,
-  },
-  h('button', {
-    class: 'obs-tipo', type: 'button', 'data-act': 'obs-alternar',
-    'aria-label': x.tipo === 'ok' ? 'Marcar etapa como em aberto' : 'Marcar etapa como feita',
-  }, icone('check')),
-  h('span', { class: 'obs-texto' }, realcar(x.texto, o.termo)),
-  h('button', { class: 'obs-x', type: 'button', 'data-act': 'obs-excluir', 'aria-label': 'Excluir etapa' }, icone('x')))));
+  // Linhas reaproveitadas por id (não recriadas a cada render): um campo em edição não perde o
+  // foco, e o toque em outra etapa não é "engolido" quando a edição anterior salva e redesenha.
+  const lista = det.querySelector('.obs-list');
+  const existentes = new Map([...lista.children].map(li => [li.dataset.obs, li]));
+  reconciliar(lista, etapas.map(x => {
+    const li = existentes.get(x.id) || criarEtapa(x.id);
+    atualizarEtapa(li, x, o);
+    return li;
+  }));
 
   // TAGS: compactas (só as marcadas + "+ Tag"); "+ Tag" abre a lista completa.
   const todas = tagsAtivas();
@@ -192,6 +192,36 @@ function atualizarDetalhe(det, p, etapas, feitas, o) {
       h('button', { class: 'btn btn-sm btn-danger', type: 'button', 'data-act': 'excluir-sim', text: 'Excluir' }),
       h('button', { class: 'btn btn-sm', type: 'button', 'data-act': 'excluir-nao', text: 'Cancelar' }))
     : h('button', { class: 'link-danger', type: 'button', 'data-act': 'excluir' }, icone('trash'), 'Excluir pendência'));
+}
+
+function criarEtapa(id) {
+  return h('li', { class: 'obs', 'data-obs': id },
+    h('button', { class: 'obs-tipo', type: 'button', 'data-act': 'obs-alternar' }, icone('check')),
+    h('span', { class: 'obs-texto', role: 'button', tabindex: '0', 'data-act': 'obs-editar' }),
+    h('button', { class: 'obs-x', type: 'button', 'data-act': 'obs-excluir', 'aria-label': 'Excluir etapa' }, icone('x')));
+}
+
+// Etapa: [○/✓ alterna] [texto — tocar edita no lugar] [× exclui]
+function atualizarEtapa(li, x, o) {
+  li.className = `obs obs-${x.tipo}`;
+  li.title = `Anotada em ${ddmm(x.data)}`;
+  li.querySelector('.obs-tipo').setAttribute('aria-label', x.tipo === 'ok' ? 'Marcar etapa como em aberto' : 'Marcar etapa como feita');
+
+  const editando = o.editandoEtapa === x.id;
+  let texto = li.querySelector('.obs-texto');
+  let campo = li.querySelector('.obs-edit');
+  if (editando && !campo) {
+    // textarea (quebra linhas como o texto); o valor inicial vem do texto gravado
+    campo = h('textarea', { class: 'obs-edit', rows: 1, 'aria-label': 'Editar etapa', enterkeyhint: 'send', spellcheck: 'true', text: x.texto });
+    texto.replaceWith(campo);
+  } else if (!editando && campo) {
+    texto = h('span', { class: 'obs-texto', role: 'button', tabindex: '0', 'data-act': 'obs-editar' });
+    campo.replaceWith(texto);
+  }
+  if (!editando) {
+    texto.replaceChildren(realcar(x.texto, o.termo));
+    texto.setAttribute('aria-label', `Editar etapa: ${x.texto}`);
+  }
 }
 
 export function ajustarAltura(ta) {
