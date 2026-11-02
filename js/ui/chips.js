@@ -10,8 +10,8 @@ export function renderizarChips(raiz, abertas, filtro) {
     h('button', { class: 'chip', type: 'button', 'data-filtro': '', 'aria-pressed': String(!filtro) },
       'Todas', h('span', { class: 'chip-n num', text: String(abertas.length) })),
     ...tags.map(t => h('button', {
-      class: 'chip', type: 'button', 'data-filtro': t.id, 'data-cor': t.cor, 'aria-pressed': String(filtro === t.id),
-    }, h('span', { class: 'dot' }), t.nome, h('span', { class: 'chip-n num', text: String(contar(t.id)) }))),
+      class: 'chip chip-tag', type: 'button', 'data-filtro': t.id, 'data-cor': t.cor, 'aria-pressed': String(filtro === t.id),
+    }, h('span', { class: 'dot' }), icone('check', 'chip-check'), t.nome, h('span', { class: 'chip-n num', text: String(contar(t.id)) }))),
   ];
   if (!tags.length) {
     chips.push(h('button', { class: 'chip chip-ghost', type: 'button', 'data-act': 'abrir-tags' }, icone('plus'), 'Criar tags'));

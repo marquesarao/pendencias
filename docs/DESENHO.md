@@ -358,8 +358,25 @@ Ajustes em relação aos hex pedidos (mínimo para passar):
 | c7 | Rosa | #b8336a | #ff9ec4 |
 | c8 | Violeta | #8a3fb0 | #d4a5ff |
 
-Chip ativo (filtro e tags marcadas no item): fundo `--accent-soft`, texto e borda `--accent`;
-a bolinha mantém a cor da tag.
+**Seletores de tag** (tags do item aberto e chips de filtro por tag) — a seleção fala a cor da
+tag; o azul/verde-limão do acento **não** indica seleção de tag (só o chip "Todas" e o anel de
+foco de teclado usam o acento):
+
+| Estado | Fundo | Texto | Borda | Marcador | Peso |
+|---|---|---|---|---|---|
+| Selecionado | tinta da tag: `color-mix(cor forte 10%, #fff)` no claro; `color-mix(cor forte 14%, #23272d)` no escuro | cor forte da tag | 1.5px na cor forte | ✓ na cor da tag | 600 |
+| Não selecionado | transparente | `--text-2` | 1px `--line` | bolinha na cor da tag | 500 |
+
+- Os rótulos da lista continuam como estavam (claro: branco com borda tingida; escuro: #2c3036);
+  no claro o branco não diferenciava a seleção, por isso o chip selecionado usa a **tinta**.
+- Texto sobre a tinta no claro: verde-água #0e7c86 → **#0d7680** (4.33 → 4.69:1) e laranja
+  #c35500 → **#b34d00** (3.98 → 4.63:1), só dentro do chip (tokens `--c2-chip`, `--c5-chip`).
+  As demais cores e todo o escuro passam como estão.
+- Número de ordem (só com 2+ tags marcadas): selo com fundo na cor forte da tag e número branco
+  (claro) / #1c1f24 (escuro) — ≥ 4.55:1 em todas.
+- `aria-pressed` mantido; após alternar pelo teclado o foco volta ao mesmo chip.
+- Contraste medido no navegador com as 8 tags selecionadas (+ selos 1–8 + filtro selecionado):
+  54 textos por tema, zero falhas.
 
 ## 5b. PWA (fatia 5)
 
@@ -420,3 +437,5 @@ a bolinha mantém a cor da tag.
   confirmação e contagem da fila; pergunta na primeira conexão com dados locais.
 - 2026-11-02 — Fatia 5: PWA (seção 5b). Acessibilidade: a área do título da linha virou
   `role="button"` focável (Enter/espaço abre e recolhe), corrigindo `aria-expanded` sem papel.
+- 2026-11-02 — Ajuste visual: seletores de tag com a cor da própria tag (seção "Paleta" →
+  "Seletores de tag"); foco de teclado preservado ao alternar. Cache do SW: v1 → v2.

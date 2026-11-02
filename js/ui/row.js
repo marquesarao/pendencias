@@ -115,6 +115,8 @@ function atualizarDetalhe(det, p, obs, o) {
 
   const todas = tagsAtivas();
   const dTags = det.querySelector('.d-tags');
+  // O redesenho troca os chips: guarda qual tinha o foco (teclado) para devolver depois.
+  const tagComFoco = dTags.contains(document.activeElement) ? document.activeElement.dataset.tag : null;
   if (!todas.length) {
     dTags.replaceChildren(h('span', { class: 'd-label', text: 'Tags' }),
       h('button', { class: 'chip chip-sm chip-ghost', type: 'button', 'data-act': 'abrir-tags' }, icone('plus'), 'Criar tags'));
@@ -122,12 +124,13 @@ function atualizarDetalhe(det, p, obs, o) {
     dTags.replaceChildren(h('span', { class: 'd-label', text: 'Tags' }), ...todas.map(t => {
       const pos = p.tags.indexOf(t.id);
       return h('button', {
-        class: 'chip chip-sm', type: 'button', 'data-act': 'tag-alternar', 'data-tag': t.id,
+        class: 'chip chip-sm chip-tag', type: 'button', 'data-act': 'tag-alternar', 'data-tag': t.id,
         'data-cor': t.cor, 'aria-pressed': String(pos >= 0),
-      }, h('span', { class: 'dot' }), t.nome,
+      }, h('span', { class: 'dot' }), icone('check', 'chip-check'), t.nome,
       pos >= 0 && p.tags.length > 1 ? h('span', { class: 'chip-pos num', text: String(pos + 1), title: pos === 0 ? 'Tag principal' : '' }) : null);
     }));
   }
+  if (tagComFoco) dTags.querySelector(`[data-tag="${tagComFoco}"]`)?.focus();
 
   const foot = det.querySelector('.d-foot');
   const prazoAtual = foot.querySelector('input[type=date]');

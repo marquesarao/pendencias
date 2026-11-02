@@ -59,6 +59,10 @@
   --c6-fg: #7a5230; --c6-bg: #ffffff;   /* marrom (era terracota) */
   --c7-fg: #b8336a; --c7-bg: #ffffff;   /* rosa */
   --c8-fg: #8a3fb0; --c8-bg: #ffffff;   /* violeta */
+  /* Chip de tag selecionado: fundo = tinta suave da cor da tag; texto/✓/borda na cor forte.
+     Verde-água e laranja escurecem um pouco só no texto do chip (AA sobre a tinta). */
+  --tag-tinta: 10%; --tag-tinta-base: #ffffff; --tag-selo-tinta: #ffffff;
+  --c2-chip: #0d7680; --c5-chip: #b34d00;
 
   --radius: 14px;
   --font: 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -115,6 +119,8 @@
     --c6-fg: #d9b38c; --c6-bg: #2c3036;
     --c7-fg: #ff9ec4; --c7-bg: #2c3036;
     --c8-fg: #d4a5ff; --c8-bg: #2c3036;
+    --tag-tinta: 14%; --tag-tinta-base: #23272d; --tag-selo-tinta: #1c1f24;
+    --c2-chip: #6fd6d6; --c5-chip: #ffb36b;
   }
 }
 
@@ -164,13 +170,15 @@
   --c6-fg: #d9b38c; --c6-bg: #2c3036;
   --c7-fg: #ff9ec4; --c7-bg: #2c3036;
   --c8-fg: #d4a5ff; --c8-bg: #2c3036;
+  --tag-tinta: 14%; --tag-tinta-base: #23272d; --tag-selo-tinta: #1c1f24;
+  --c2-chip: #6fd6d6; --c5-chip: #ffb36b;
 }
 
 [data-cor="c1"] { --fg: var(--c1-fg); --tbg: var(--c1-bg); }
-[data-cor="c2"] { --fg: var(--c2-fg); --tbg: var(--c2-bg); }
+[data-cor="c2"] { --fg: var(--c2-fg); --tbg: var(--c2-bg); --fg-chip: var(--c2-chip); }
 [data-cor="c3"] { --fg: var(--c3-fg); --tbg: var(--c3-bg); }
 [data-cor="c4"] { --fg: var(--c4-fg); --tbg: var(--c4-bg); }
-[data-cor="c5"] { --fg: var(--c5-fg); --tbg: var(--c5-bg); }
+[data-cor="c5"] { --fg: var(--c5-fg); --tbg: var(--c5-bg); --fg-chip: var(--c5-chip); }
 [data-cor="c6"] { --fg: var(--c6-fg); --tbg: var(--c6-bg); }
 [data-cor="c7"] { --fg: var(--c7-fg); --tbg: var(--c7-bg); }
 [data-cor="c8"] { --fg: var(--c8-fg); --tbg: var(--c8-bg); }
@@ -953,3 +961,21 @@ body.arrastando-algo { cursor: grabbing; user-select: none; -webkit-user-select:
 /* Configurações → Aplicativo */
 .card-row-acao { margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--accent); }
 .card-row-acao .btn { margin: 0; }
+
+/* Seletores de tag (tags do item aberto e filtros por tag): a seleção fala a cor da tag,
+   nunca o azul do acento. Selecionado: tinta da tag, texto/borda 1.5px na cor forte, ✓ no lugar
+   da bolinha, peso 600. Não selecionado: transparente, borda neutra, texto secundário. */
+.chip.chip-tag { font-weight: 500; color: var(--text-2); background: transparent; border-color: var(--line); }
+.chip-tag .chip-check { display: none; width: 13px; height: 13px; stroke: var(--fg-chip, var(--fg)); stroke-width: 3; }
+.chip.chip-tag[aria-pressed="true"] {
+  --tinta: color-mix(in srgb, var(--fg) var(--tag-tinta), var(--tag-tinta-base));
+  background: var(--tinta);
+  color: var(--fg-chip, var(--fg));
+  border-color: var(--fg);
+  box-shadow: inset 0 0 0 .5px var(--fg); /* 1px de borda + .5px = 1.5px, sem mexer no tamanho */
+  font-weight: 600;
+}
+.chip.chip-tag[aria-pressed="true"] .dot { display: none; }
+.chip.chip-tag[aria-pressed="true"] .chip-check { display: block; }
+.chip.chip-tag[aria-pressed="true"] .chip-n { color: inherit; }
+.chip-tag .chip-pos { background: var(--fg); color: var(--tag-selo-tinta); }
