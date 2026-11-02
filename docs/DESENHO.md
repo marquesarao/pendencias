@@ -361,6 +361,30 @@ Ajustes em relação aos hex pedidos (mínimo para passar):
 Chip ativo (filtro e tags marcadas no item): fundo `--accent-soft`, texto e borda `--accent`;
 a bolinha mantém a cor da tag.
 
+## 5b. PWA (fatia 5)
+
+- `manifest.webmanifest`: name/short_name "Pendências", `lang` pt-BR, `id`/`start_url`/`scope`
+  "./", `display` standalone, `orientation` any, `theme_color`/`background_color` #f5f7fa
+  (o escuro #1c1f24 vem do `<meta name="theme-color" media=…>`). Ícones 192, 512 e maskable 512
+  (`icons/icon-maskable.svg`: fundo cheio, ✓ na área segura) + `apple-touch-icon.png` (180).
+  PNGs gerados por `tools/gerar-icones.html` (sem dependências) e commitados.
+- `sw.js`: cache `pendencias-<VERSAO>` com o app shell (lista `SHELL`); `install` baixa com
+  `cache: 'reload'` (ignora o cache HTTP do Pages) e **não** chama `skipWaiting`; `activate`
+  apaga caches `pendencias-*` antigos e faz `clients.claim()`; `fetch` só trata GET da própria
+  origem (o Apps Script, POST em script.google.com, vai sempre pela rede): navegação →
+  `index.html` do cache; demais → cache-first. Responde `{tipo:'versao'}` e `{tipo:'atualizar'}`.
+- `js/pwa.js`: registra `sw.js` (relativo, `updateViaCache: 'none'`); procura versão nova ao
+  voltar para o app; SW novo esperando → aviso persistente "Nova versão disponível · Atualizar"
+  (+ botão em Configurações → Aplicativo); ao tocar, `skipWaiting` e **uma** recarga (só
+  recarrega no `controllerchange` pedido pelo usuário — nunca na primeira visita, sem laço).
+- Instalação: `beforeinstallprompt` guardado; botão "Instalar app" em Configurações e aviso
+  único (marca `pend.avisoInstalar` no localStorage); oculto se já instalado
+  (`display-mode: standalone`). `appinstalled` → `navigator.storage.persist()` de novo.
+- Configurações → Aplicativo: "Versão vN" (lida do SW) e "Instalado"/"No navegador".
+- **Regra de publicação:** a cada publicação, aumentar `VERSAO` em `sw.js`; arquivo novo do app
+  entra na lista `SHELL`.
+- `.nojekyll` na raiz; `.gitignore`.
+
 ## 6. Testes por fatia
 
 - Fatia 2: função `testarApi()` no editor + chamadas externas (console do navegador /
@@ -394,3 +418,5 @@ a bolinha mantém a cor da tag.
 - 2026-11-02 — Fatia 4: sincronização (seção 4 → "Implementação", "Configurações →
   Sincronização", "Apagar dados deste aparelho"). Pedidos do usuário: botão de apagar com
   confirmação e contagem da fila; pergunta na primeira conexão com dados locais.
+- 2026-11-02 — Fatia 5: PWA (seção 5b). Acessibilidade: a área do título da linha virou
+  `role="button"` focável (Enter/espaço abre e recolhe), corrigindo `aria-expanded` sem papel.

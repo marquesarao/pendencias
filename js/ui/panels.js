@@ -5,6 +5,7 @@ import { arrastavel } from './drag.js';
 import { toast } from './toast.js';
 import * as store from '../store.js';
 import * as sync from '../sync.js';
+import * as pwa from '../pwa.js';
 import { chaveDia, rotuloDia, hhmm, plural } from '../util.js';
 
 const TITULOS = { concluidas: 'Concluídas', tags: 'Tags', config: 'Configurações' };
@@ -199,13 +200,15 @@ function painelConfig() {
   const arm = {
     verificando: ['Verificando…', 'neutro', ''],
     persistente: ['Persistente', 'ok', 'O navegador não apaga estes dados sozinho, nem com pouco espaço livre.'],
-    nao: ['Não persistente', 'aviso', 'Se faltar espaço, o navegador pode apagar os dados deste site. Instalar o app (em breve) ou usá-lo com frequência costuma liberar o modo persistente.'],
+    nao: ['Não persistente', 'aviso', 'Se faltar espaço, o navegador pode apagar os dados deste site. Instalar o app ou usá-lo com frequência costuma liberar o modo persistente.'],
     indisponivel: ['Indisponível neste navegador', 'neutro', 'Este navegador não informa se o armazenamento é persistente.'],
   }[ui.armazenamento];
 
   const pend = store.pendenciasAtivas();
   return [
     secaoSincronizacao(),
+
+    secaoAplicativo(),
 
     h('section', { class: 'p-section' },
       h('h3', { class: 'p-label', text: 'Aparência' }),
@@ -311,6 +314,26 @@ function secaoSincronizacao() {
     situacao, form, pergunta);
 }
 
+function secaoAplicativo() {
+  const p = pwa.estado;
+  const situacao = p.instalado ? ['Instalado', 'ok'] : ['No navegador', 'neutro'];
+  return h('section', { class: 'p-section' },
+    h('h3', { class: 'p-label', text: 'Aplicativo' }),
+    h('div', { class: 'card' },
+      h('div', { class: 'card-row' },
+        h('span', { class: 'num', text: `Versão ${p.versao || '—'}` }),
+        h('span', { class: `status status-${situacao[1]}`, text: situacao[0] })),
+      p.atualizacao
+        ? h('div', { class: 'card-row card-row-acao' },
+          h('span', { text: 'Nova versão disponível.' }),
+          h('button', { class: 'btn btn-primary btn-sm', type: 'button', 'data-act': 'atualizar-app', text: 'Atualizar' }))
+        : null,
+      p.podeInstalar && !p.instalado
+        ? [h('p', { class: 'card-nota', text: 'Instale para abrir pelo ícone, em tela cheia e mesmo sem internet.' }),
+          h('button', { class: 'btn btn-primary btn-sm', type: 'button', 'data-act': 'instalar-app', text: 'Instalar app' })]
+        : null));
+}
+
 function blocoApagar() {
   if (!estado.confirmarApagar) {
     return h('button', { class: 'link-danger', type: 'button', 'data-act': 'apagar' }, icone('trash'), 'Apagar dados deste aparelho');
@@ -369,6 +392,8 @@ function aoClicar(e) {
     case 'apagar': estado.confirmarApagar = true; break;
     case 'apagar-nao': estado.confirmarApagar = false; break;
     case 'apagar-sim': return apagarEsteAparelho();
+    case 'atualizar-app': pwa.atualizar(); return;
+    case 'instalar-app': pwa.instalar(); return;
     default: return;
   }
   renderizarPainel(true);

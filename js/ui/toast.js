@@ -6,6 +6,7 @@ const MAX = 3;
  * Aviso discreto no rodapé.
  * @param {string} mensagem
  * @param {{ acao?: { rotulo: string, fn: Function }, tempo?: number, tipo?: 'erro' }} opcoes
+ *   tempo em ms (padrão 5 s); 0 deixa o aviso aberto até o usuário agir.
  */
 export function toast(mensagem, { acao, tempo = 5000, tipo } = {}) {
   const raiz = document.getElementById('toasts');
@@ -30,8 +31,10 @@ export function toast(mensagem, { acao, tempo = 5000, tipo } = {}) {
   raiz.append(el);
   while (raiz.children.length > MAX) raiz.firstElementChild.remove();
 
-  let timer = setTimeout(fechar, tempo);
-  el.addEventListener('pointerenter', () => clearTimeout(timer));
-  el.addEventListener('pointerleave', () => { timer = setTimeout(fechar, 2500); });
+  if (tempo) { // tempo 0 = fica até o usuário agir
+    let timer = setTimeout(fechar, tempo);
+    el.addEventListener('pointerenter', () => clearTimeout(timer));
+    el.addEventListener('pointerleave', () => { timer = setTimeout(fechar, 2500); });
+  }
   return fechar;
 }

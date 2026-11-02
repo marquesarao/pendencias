@@ -12,7 +12,7 @@ export function criarLinha(id) {
       h('span', { class: 'grip', 'aria-hidden': 'true' }, icone('grip')),
       h('button', { class: 'check', type: 'button', role: 'checkbox', 'data-act': 'feito' },
         h('span', { class: 'check-box' }, icone('check'))),
-      h('div', { class: 'line-main', 'data-act': 'abrir' },
+      h('div', { class: 'line-main', 'data-act': 'abrir', role: 'button', tabindex: '0' },
         h('span', { class: 'title' }, h('span', { class: 'title-text' })),
         h('span', { class: 'line-tags' }),
         h('span', { class: 'meta' })),

@@ -2,6 +2,7 @@
 
 import * as store from './store.js';
 import * as sync from './sync.js';
+import * as pwa from './pwa.js';
 import { interpretarCaptura, interpretarObservacao } from './parse.js';
 import { renderizarLista } from './ui/list.js';
 import { renderizarChips } from './ui/chips.js';
@@ -244,6 +245,12 @@ main.addEventListener('keydown', e => {
     e.preventDefault();
     t.blur(); // dispara o change
   }
+  // Linha focada com Tab: Enter/espaço abre ou recolhe (é um botão para leitores de tela).
+  if (t.matches('.line-main') && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    e.stopPropagation(); // não deixa o atalho global agir de novo
+    alternarAberto(t.closest('.row').dataset.id, e.key === 'Enter');
+  }
 });
 
 main.addEventListener('submit', e => {
@@ -482,6 +489,10 @@ async function iniciar() {
   $('sync').addEventListener('click', () => abrirPainel('config'));
   sync.aoMudarStatus(mostrarStatus);
   sync.iniciarSync().catch(err => avisarErro('Não foi possível iniciar a sincronização', err));
+
+  pwa.aoMudar(() => renderizarPainel());
+  // Depois de instalar, o navegador costuma liberar o armazenamento persistente: pede de novo.
+  pwa.iniciarPwa({ aoInstalar: () => verificarArmazenamento(true) });
 
   if (matchMedia('(hover: hover) and (pointer: fine)').matches) captura.focus();
 }

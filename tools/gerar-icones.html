@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gerar ícones do Pendências</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; max-width: 720px; margin: 32px auto; padding: 0 16px; color: #1d2d3e; background: #f5f7fa; }
+    .icones { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; }
+    figure { margin: 0; text-align: center; }
+    canvas { display: block; width: 128px; height: 128px; background: repeating-conic-gradient(#e3e8ed 0 25%, #fff 0 50%) 0 0 / 16px 16px; border-radius: 8px; }
+    .mascara canvas { clip-path: circle(40%); }
+    a { color: #0064d9; font-weight: 600; }
+    code { background: #e8f3ff; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Gerar os PNGs dos ícones</h1>
+  <p>
+    Esta página desenha os SVGs de <code>icons/</code> em PNG, sem instalar nada. Sirva a pasta do
+    projeto (<code>npx serve -l 8137</code>), abra
+    <code>http://localhost:8137/tools/gerar-icones.html</code>, clique em cada link para baixar e
+    salve os arquivos em <code>icons/</code>, substituindo os antigos.
+  </p>
+  <p>O ícone <em>maskable</em> aparece também recortado no círculo da área segura: o ✓ precisa caber inteiro.</p>
+  <div class="icones" id="icones"></div>
+
+  <script>
+    // [arquivo de origem, tamanho, nome do PNG]
+    const ICONES = [
+      ['../icons/icon.svg', 192, 'icon-192.png'],
+      ['../icons/icon.svg', 512, 'icon-512.png'],
+      ['../icons/icon-maskable.svg', 512, 'icon-maskable-512.png'],
+      ['../icons/icon.svg', 180, 'apple-touch-icon.png'],
+    ];
+
+    function carregar(src) {
+      return new Promise((ok, falha) => {
+        const img = new Image();
+        img.onload = () => ok(img);
+        img.onerror = () => falha(new Error('Não foi possível carregar ' + src));
+        img.src = src;
+      });
+    }
+
+    // Exposto para automação: devolve { nome: dataURL } de todos os ícones.
+    window.gerarIcones = async function () {
+      const saida = {};
+      const raiz = document.getElementById('icones');
+      raiz.replaceChildren();
+      for (const [src, tam, nome] of ICONES) {
+        const img = await carregar(src);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = tam;
+        canvas.getContext('2d').drawImage(img, 0, 0, tam, tam);
+        const url = canvas.toDataURL('image/png');
+        saida[nome] = url;
+        const fig = document.createElement('figure');
+        if (nome.includes('maskable')) fig.className = 'mascara';
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = nome;
+        link.textContent = `${nome} (${tam}×${tam})`;
+        fig.append(canvas, link);
+        raiz.append(fig);
+      }
+      return saida;
+    };
+
+    gerarIcones().catch(err => { document.body.append(err.message); });
+  </script>
+</body>
+</html>

@@ -212,7 +212,10 @@ IndexedDB, `crypto.randomUUID` e `navigator.storage.persist()` funcionam como em
 - Para zerar os dados de teste: **Configurações → Armazenamento → Apagar dados deste aparelho**
   (limpa pendências, observações, tags, fila de envio e o cursor de sincronização; mantém URL,
   token e preferências).
-- O teste no celular fica para a fatia 5 (GitHub Pages).
+- O teste no celular é feito pelo GitHub Pages (seção 6).
+- **Service worker:** depois da primeira visita, o app passa a abrir do cache, inclusive em
+  `localhost`. Se você editar algum arquivo, suba a versão em `sw.js` ou use DevTools →
+  **Application → Service workers → Update on reload** para ver a mudança.
 
 ## 3. Conectar o app à planilha
 
@@ -290,4 +293,123 @@ mesma).
 
 ## 5. Publicar no GitHub Pages
 
-*(Fatia 5.)*
+Repositório: `marquesarao/pendencias` (público), branch `main`, raiz do repo.
+URL final: **https://marquesarao.github.io/pendencias/**
+
+Todos os caminhos do app, do manifest e do service worker são relativos: o mesmo código roda em
+`/pendencias/` e em `http://localhost:8137/`.
+
+### 5.1 Antes de cada push: nenhum segredo no repositório
+
+O repositório é público. **Nunca** podem ir para ele:
+
+- o **token** do Apps Script;
+- a **URL `/exec`** real do seu Web App (o ID começa com `AKfy…`);
+- capturas de tela ou exports com esses valores.
+
+Eles só existem nas Propriedades do script (Google) e no `localStorage` de cada aparelho.
+Depois do `git add`, confira o que vai subir (os dois comandos devem voltar **vazios**):
+
+```powershell
+# 1) Alguma URL /exec real? (os exemplos do README usam SEU_ID, que não casa com o padrão)
+git grep --cached -nE "macros/s/[A-Za-z0-9_-]{20,}"
+
+# 2) O token? Troque XXXXXXXX pelos 8 primeiros caracteres do SEU token
+#    (digite só no terminal; não salve em arquivo nenhum)
+git grep --cached -n "XXXXXXXX"
+```
+
+Se algum comando mostrar uma linha, **não faça o push**: tire o valor do arquivo, rode
+`git add -A` de novo e repita a conferência.
+
+### 5.2 Primeira publicação
+
+No PowerShell, na pasta do projeto (o repositório já está ligado ao `origin`):
+
+```powershell
+cd "C:\Users\leand\OneDrive\Desktop\IA\APP Pendências"
+git status
+git add -A
+git grep --cached -nE "macros/s/[A-Za-z0-9_-]{20,}"
+git grep --cached -n "XXXXXXXX"
+git commit -m "Fatia 5: PWA (manifest, service worker, ícones) e instruções do GitHub Pages"
+git push origin main
+```
+
+Depois, no GitHub (uma vez só):
+
+1. Repositório → **Settings** → **Pages** (menu lateral, em "Code and automation").
+2. **Build and deployment → Source: Deploy from a branch**.
+3. **Branch: `main`**, pasta **`/ (root)`** → **Save**.
+
+### 5.3 Como saber que publicou
+
+- Aba **Actions** do repositório: o fluxo **"pages build and deployment"** fica com ✓ verde
+  (leva 1–2 minutos).
+- Em **Settings → Pages** aparece "Your site is live at
+  **https://marquesarao.github.io/pendencias/**" com o botão **Visit site**.
+- Abra a URL no Chrome do desktop → F12 → **Application**:
+  - **Manifest**: nome "Pendências", ícones e nenhum erro de instalação;
+  - **Service workers**: `sw.js` "activated and is running";
+  - **Cache storage**: `pendencias-v1` com o app.
+- Em **Configurações → Aplicativo** do app aparece **"Versão v1"**.
+
+O arquivo `.nojekyll` (vazio) faz o GitHub Pages servir os arquivos como estão, sem processá-los.
+
+### 5.4 Publicar uma atualização
+
+1. Faça as mudanças.
+2. **Aumente a versão do cache em `sw.js`**: `const VERSAO = 'v1';` → `'v2'` (depois `'v3'`…).
+   Sem isso, os aparelhos continuam usando a versão antiga em cache.
+   Se criou um arquivo novo (um módulo JS, por exemplo), acrescente-o à lista `SHELL` do `sw.js`.
+3. Faça a conferência de segredos (5.1), o commit e o push:
+   ```powershell
+   git add -A
+   git grep --cached -nE "macros/s/[A-Za-z0-9_-]{20,}"
+   git commit -m "Descreva a mudança (cache v2)"
+   git push origin main
+   ```
+4. Espere o ✓ verde em **Actions**.
+5. Nos aparelhos: ao abrir o app (ou voltar para ele), aparece o aviso
+   **"Nova versão disponível · Atualizar"** (também em Configurações → Aplicativo). Ao tocar, o
+   app recarrega uma vez e passa a mostrar a versão nova. Os dados não são afetados.
+
+## 6. Roteiro de teste no celular (Android)
+
+**Instalar**
+1. No Chrome do Android, abra **https://marquesarao.github.io/pendencias/**.
+2. Aparece (uma única vez) o aviso "Instale o Pendências…" → **Instalar**. Se não aparecer:
+   **Configurações → Aplicativo → Instalar app**, ou menu ⋮ do Chrome → **Instalar app**.
+3. Feche o Chrome e abra o app **pelo ícone** na tela inicial: abre em tela cheia, sem barra de
+   endereço. Configurações → Aplicativo mostra **"Instalado"**.
+
+**Conectar à planilha**
+4. Para colar URL e token sem digitar: mande os dois para você mesmo por um canal **privado**
+   (ex.: "Mensagens para mim mesmo" do WhatsApp, ou um e-mail para você), copie no celular e
+   **apague a mensagem depois**. Não use grupos nem notas compartilhadas.
+5. Configurações → Sincronização → cole a URL e o token → **Conectar e sincronizar**.
+6. Se o celular já tiver itens de teste, o app pergunta: escolha **Apagar e baixar da planilha**.
+   As pendências do desktop aparecem; o indicador fica "Sincronizado".
+
+**Offline**
+7. Ative o **modo avião**. Feche o app e abra de novo pelo ícone: abre normalmente, indicador
+   "Offline".
+8. Crie um item ("teste avião"). Desative o modo avião: em alguns segundos, "Sincronizado".
+9. No desktop, **Sincronizar agora** (ou volte para a aba): "teste avião" aparece.
+
+**Teclado e toque**
+10. Na captura, digite um texto e toque na tecla **Enviar** do teclado virtual: o item é criado.
+11. Abra um item, escreva uma observação e toque em **Enviar**: a observação entra.
+12. **Arraste por toque**: segure uma linha ~300 ms (vibra de leve) e arraste — dentro de um grupo
+    e dentro do "Em foco". Solte e confira a ordem; reabra o app: a ordem continua.
+13. Deslizar rápido sobre a lista **rola** a página (não arrasta).
+14. Abra um item e **role a lista**: o item continua aberto. Depois **toque fora** dele: recolhe.
+    Toque no título e no botão ⌃ (Fechar) também recolhem.
+
+**Armazenamento**
+15. Configurações → Armazenamento: depois de instalar, deve aparecer **"Persistente"** (o app pede
+    de novo ao instalar). Se ainda estiver "Não persistente", toque em **Pedir de novo**.
+
+**Atualização (na próxima publicação)**
+16. Depois de publicar uma versão nova (5.4), abra o app: aviso "Nova versão disponível ·
+    Atualizar" → tocar → recarrega uma vez, e Configurações mostra a versão nova.

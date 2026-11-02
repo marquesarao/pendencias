@@ -949,3 +949,7 @@ body.arrastando-algo { cursor: grabbing; user-select: none; -webkit-user-select:
     scroll-behavior: auto !important;
   }
 }
+
+/* Configurações → Aplicativo */
+.card-row-acao { margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--accent); }
+.card-row-acao .btn { margin: 0; }

@@ -1,0 +1,10 @@
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Ferramentas
+node_modules/
+*.log
+.vscode/
+.claude/

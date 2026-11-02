@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable: fundo cobre o quadro inteiro (o Android recorta em círculo/squircle);
+       o ✓ fica dentro da área segura (círculo central de 80%). -->
+  <rect width="512" height="512" fill="#0064d9"/>
+  <path d="M168 268l60 60 120-133" fill="none" stroke="#ffffff" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
