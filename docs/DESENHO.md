@@ -33,6 +33,9 @@ js/ui/panels.js          gaveta/folha: Concluídas, Tags, Configurações
 js/ui/search.js          busca rápida
 js/ui/toast.js           avisos discretos com ação
 js/ui/dom.js             helpers de DOM: h(), ícones, reconciliação sem perder foco, realce de busca
+js/resumo-dados.js       cálculos do Resumo/Relatório (sem DOM)
+js/ui/resumo.js          painel Resumo (abas Resumo e Relatório)
+js/pwa.js                service worker, aviso de nova versão, instalação
 fonts/manrope-var.woff2, fonts/OFL.txt
 icons/icon.svg, icon-192.png, icon-512.png, maskable-512.png
 tools/                   (fatia 5) geração dos PNGs a partir do SVG — fora do app
@@ -480,12 +483,94 @@ foco de teclado usam o acento):
   entra na lista `SHELL`.
 - `.nojekyll` na raiz; `.gitignore`.
 
+## 5c. Resumo e Relatório (Parte C)
+
+Tudo calculado no aparelho, sob demanda ao abrir o painel, a partir do IndexedDB (funciona
+offline); redesenha sozinho se a sincronização trouxer dados com o painel aberto. Não mexe na
+planilha nem no Apps Script. **Sem enviar/compartilhar** — a única ação externa é "Copiar".
+Ignora sempre itens, etapas e tags com `excluido=TRUE` (item de tag excluída conta como "Sem
+tag"). Datas no fuso local; **semana de segunda a domingo**; datas comparadas por dia
+(`AAAA-MM-DD`). Arquivos: `js/resumo-dados.js` (cálculos) e `js/ui/resumo.js` (tela).
+
+**Acesso:** ícone "Resumo" (gráfico) no cabeçalho, entre a busca e Concluídas. Desktop: gaveta de
+720 px. Celular: tela cheia, com × no topo. Abas "Resumo" e "Relatório"; a última usada fica
+salva no aparelho (`pend.resumoAba`). No celular (≤ 600 px) o nome "Pendências" sai do cabeçalho
+(fica o símbolo, com o nome no `aria-label`) para as 5 ferramentas de 44 × 44 caberem em 360 px.
+
+### Aba Resumo — indicadores
+
+| Bloco | Regra | Toque |
+|---|---|---|
+| Atrasadas (cartão) | abertas com `prazo` < hoje; tom de alerta se > 0 | rola até "Prazos" |
+| Aguardando (cartão) | abertas com `aguardando` | fecha o painel e liga só o chip "Aguardando" |
+| Concluídas na semana (cartão) | `feito` com `feitoEm` de segunda até hoje | abre o Relatório em "Esta semana" |
+| Abertas por tag | por tag ativa: abertas com a tag (item com várias tags conta em cada uma — nota no bloco); trecho mais claro = aguardando, com legenda e o número escrito; ordem: maior → menor (empate: ordem dos chips); "Sem tag" no fim | fecha o painel e filtra a lista só por aquela tag ("Sem tag" não é tocável) |
+| Aguardando há mais tempo | top 5 abertas aguardando, `aguardandoEm` mais antigo primeiro; "há N d" / "hoje"; ≥ 7 dias em alerta; sem data no fim ("sem data"); bloco some se não houver | abre o item na lista |
+| Prazos | grupos Atrasadas (< hoje), Hoje (= hoje), Próximos 7 dias (hoje < prazo ≤ hoje+7), ordenados por prazo; até 5 por grupo + "+N mais"; grupo vazio some; nenhum: "Nenhum prazo nos próximos 7 dias." | abre o item na lista |
+
+"Abrir o item na lista": fecha o painel, limpa a busca, desliga os filtros **só** se o item estiver
+escondido por eles, expande o item e rola até ele.
+
+### Aba Relatório — concluídas
+
+- **Período:** Hoje · Esta semana (seg–dom, padrão) · Semana passada · Este mês · Mês passado ·
+  Personalizado (De/Até; datas invertidas são aceitas e ordenadas). Rótulo "03/11 a 09/11"
+  (com o ano quando o período não é do ano atual).
+- **Tags:** seleção múltipla (OU), padrão "Todas".
+- **Agrupamento:** por tag, na ordem dos chips; o item aparece **só no grupo da 1ª tag** dele —
+  com filtro, a 1ª tag dele **entre as filtradas**. "Sem tag" por último (só sem filtro de tags).
+  Grupo sem nada some; tudo vazio → estado vazio explicando o filtro.
+- **Concluídas:** `feito` com `feitoEm` no período — título, data de conclusão, etapas
+  "feitas/total" e a lista das etapas (✓/○, fonte menor).
+- **Em andamento:** abertas, **não aguardando**, com alguma alteração no período (`atualizadoEm`
+  do item ou de uma etapa não excluída) — título e etapas feitas/total. (Aguardando não se repete
+  aqui. Qualquer alteração conta, inclusive reordenar.)
+- **Aguardando:** abertas aguardando, independentemente do período — título e "desde dd/mm"
+  (ou "sem data").
+- **Totais** no topo: N concluídas · N em andamento · N aguardando.
+- **Copiar:** texto simples na área de transferência (fallback com `execCommand` se a API não
+  existir), aviso "Relatório copiado". Formato:
+
+```
+Randon — 03/11 a 09/11
+Concluídas:
+• Projeto VPO (3/3 etapas) — 05/11
+Em andamento:
+• Projeto Solicitação de frete — 1/4 etapas
+Aguardando:
+• Validação do layout — desde 05/11
+```
+
+  (um bloco por tag, separados por linha em branco; sem etapas, a parte "(x/y etapas)" é omitida).
+- **Impressão (Ctrl+P → PDF):** `@media print` mostra só o conteúdo do painel aberto, sem
+  cabeçalho, abas, filtros e botão Copiar.
+
+### Avisos com painel aberto
+
+Com um painel (`<dialog>` modal) aberto, os avisos (toasts) nascem **dentro** do painel — antes
+ficavam atrás dele, invisíveis e sem clique (afetava "Conexão salva", "Tag excluída" etc.).
+
 ## 6. Testes por fatia
 
 - Fatia 2: função `testarApi()` no editor + chamadas externas (console do navegador /
   PowerShell / curl) descritas no README.
 - Fatia 3: desktop via `http://localhost` (contexto seguro).
 - Fatia 5: celular via GitHub Pages (https) — instalação como PWA.
+
+## 7. Backlog (não implementado)
+
+Ideias registradas para depois de alguns dias de uso, em ordem de prioridade. Ainda sem solução
+definida; cada uma passa por desenho e aprovação antes de ser implementada.
+
+1. **Gestos de deslizar no celular:** direita = concluir, esquerda = foco.
+2. **Links clicáveis nas etapas.**
+3. **Anexos via Google Drive:** escopo `drive.file`, aba "anexos" na planilha, fila offline.
+4. **Atalhos no ícone do app:** "Nova pendência" e "Em foco".
+5. **Captura por voz** com transcrição.
+6. **Resumo: bloco de itens parados há mais de 30 dias.**
+7. **Resumo: gráfico de entregas por dia.**
+
+(A "Tela Resumo" saiu do backlog: implementada na Parte C — seção 5c.)
 
 ## Histórico de alterações
 
@@ -515,6 +600,12 @@ foco de teclado usam o acento):
   confirmação e contagem da fila; pergunta na primeira conexão com dados locais.
 - 2026-11-02 — Fatia 5: PWA (seção 5b). Acessibilidade: a área do título da linha virou
   `role="button"` focável (Enter/espaço abre e recolhe), corrigindo `aria-expanded` sem papel.
+- 2026-11-02 — Parte C (cache v6): painel Resumo (4 blocos) e Relatório de concluídas com
+  "Copiar" (seção 5c). Correções encontradas no caminho: avisos com painel aberto ficavam atrás
+  do painel; fechamento do painel podia ser disparado pela animação de um filho; reabrir durante
+  a animação de saída fechava o painel; cabeçalho com 5 ícones estourava 360 px. Backlog:
+  "Tela Resumo" removida; acrescentados "parados há +30 dias" e "gráfico de entregas por dia".
+- 2026-11-02 — Seção 7 "Backlog (não implementado)" registrada. Nenhuma mudança de código.
 - 2026-11-02 — Parte A (cache v5): filtros com seleção múltipla (tags OU, Aguardando E, lembrados
   por aparelho) e linha compacta no celular (bolinhas de tag, 2ª linha só com informação, título
   menor, "Em foco" vazio em linha fina, Lista corrida como padrão no celular). Ver "Regras de lista".

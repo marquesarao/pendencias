@@ -6,9 +6,10 @@ import { toast } from './toast.js';
 import * as store from '../store.js';
 import * as sync from '../sync.js';
 import * as pwa from '../pwa.js';
+import { desenharResumo, aoClicarResumo, aoMudarResumo } from './resumo.js';
 import { chaveDia, rotuloDia, hhmm, plural } from '../util.js';
 
-const TITULOS = { concluidas: 'Concluídas', tags: 'Tags', config: 'Configurações' };
+const TITULOS = { resumo: 'Resumo', concluidas: 'Concluídas', tags: 'Tags', config: 'Configurações' };
 const NOMES_CORES = {
   c1: 'Azul', c2: 'Verde-água', c3: 'Verde', c4: 'Oliva',
   c5: 'Laranja', c6: 'Marrom', c7: 'Rosa', c8: 'Violeta',
@@ -18,6 +19,7 @@ const DIAS_POR_PAGINA = 30;
 let ctx;
 let dialog;
 let corpo;
+let cancelarFechamento = null; // presente enquanto a animação de saída do painel corre
 const estado = {
   diasConcluidas: DIAS_POR_PAGINA, paleta: null, confirmarTag: null, erroTag: '',
   rascunho: null,        // { url, token } digitados e ainda não salvos
@@ -58,7 +60,7 @@ export function iniciarPaineis(contexto) {
 }
 
 export function abrirPainel(nome) {
-  if (ctx.ui.painel === nome && dialog.open) return;
+  if (ctx.ui.painel === nome && dialog.open && !dialog.classList.contains('saindo')) return;
   ctx.ui.painel = nome;
   estado.paleta = null;
   estado.confirmarTag = null;
@@ -71,6 +73,7 @@ export function abrirPainel(nome) {
   estado.confirmarApagar = false;
   document.getElementById('panel-title').textContent = TITULOS[nome];
   dialog.dataset.painel = nome;
+  cancelarFechamento?.(); // reabriu durante a animação de saída: o painel fica aberto
   renderizarPainel(true);
   if (!dialog.open) {
     dialog.classList.remove('saindo');
@@ -83,10 +86,28 @@ export function abrirPainel(nome) {
 export function fecharPainel() {
   if (!dialog.open || dialog.classList.contains('saindo')) return;
   dialog.classList.add('saindo');
-  const fim = () => { dialog.classList.remove('saindo'); dialog.style.transform = ''; dialog.close(); };
+  // Fecha uma única vez: pela animação de saída do PRÓPRIO painel (animações de filhos, como a
+  // de um aviso, também disparam animationend e sobem até aqui) ou, se ela não vier, por tempo.
+  let feito = false;
+  let timer;
+  const aoAnimar = e => { if (e.target === dialog) fim(); };
+  const encerrar = () => {
+    feito = true;
+    cancelarFechamento = null;
+    clearTimeout(timer);
+    dialog.removeEventListener('animationend', aoAnimar);
+    dialog.classList.remove('saindo');
+    dialog.style.transform = '';
+  };
+  const fim = () => {
+    if (feito) return;
+    encerrar();
+    if (dialog.open) dialog.close();
+  };
+  cancelarFechamento = encerrar;
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return fim();
-  dialog.addEventListener('animationend', fim, { once: true });
-  setTimeout(() => dialog.open && fim(), 400);
+  dialog.addEventListener('animationend', aoAnimar);
+  timer = setTimeout(fim, 400);
 }
 
 /** Redesenha o painel aberto. Sem `forcar`, não mexe se o usuário está digitando nele. */
@@ -94,7 +115,7 @@ export function renderizarPainel(forcar = false) {
   if (!ctx.ui.painel) return;
   const ativo = document.activeElement;
   if (!forcar && dialog.contains(ativo) && ativo.matches('input, textarea')) return;
-  const desenhar = { concluidas: painelConcluidas, tags: painelTags, config: painelConfig }[ctx.ui.painel];
+  const desenhar = { resumo: desenharResumo, concluidas: painelConcluidas, tags: painelTags, config: painelConfig }[ctx.ui.painel];
   corpo.replaceChildren(...desenhar().filter(Boolean));
 }
 
@@ -361,6 +382,13 @@ function vazioPainel(ico, titulo, texto) {
 function aoClicar(e) {
   const b = e.target.closest('[data-act]');
   if (!b) return;
+  if (/^(res|rel)-/.test(b.dataset.act)) {
+    aoClicarResumo(b, {
+      renderizar: () => renderizarPainel(true), fechar: fecharPainel,
+      aplicarFiltros: ctx.aplicarFiltros, abrirItem: ctx.abrirItem,
+    });
+    return;
+  }
   const id = b.dataset.id;
   switch (b.dataset.act) {
     case 'reabrir': {
@@ -484,6 +512,7 @@ function aoTeclar(e) {
 }
 
 function aoMudar(e) {
+  if (aoMudarResumo(e)) { renderizarPainel(true); return; }
   if (!e.target.matches('.tag-nome')) return;
   const r = store.renomearTag(e.target.dataset.id, e.target.value);
   if (r.erro) {

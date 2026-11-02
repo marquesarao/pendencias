@@ -12,7 +12,7 @@ import { arrastavel } from './ui/drag.js';
 import { toast } from './ui/toast.js';
 import { ajustarAltura } from './ui/row.js';
 import { h, reduzirMovimento } from './ui/dom.js';
-import { chaveDia, FILTRO_AGUARDANDO, filtrosVazios, temFiltro } from './util.js';
+import { chaveDia, FILTRO_AGUARDANDO, filtrosVazios, temFiltro, passaNosFiltros } from './util.js';
 
 const ler = (k, padrao) => { try { return localStorage.getItem(k) ?? padrao; } catch (_) { return padrao; } };
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
@@ -608,7 +608,23 @@ async function iniciar() {
     fecharBusca();
     render();
   };
-  const ctx = { ui, render, definirTema, verificarArmazenamento, limparTela };
+  // Toques no painel Resumo: filtrar a lista ou abrir um item nela.
+  const aplicarFiltros = filtros => {
+    ui.filtros = filtros;
+    guardarFiltros();
+    fecharBusca();
+    render();
+    scrollTo({ top: 0, behavior: reduzirMovimento() ? 'auto' : 'smooth' });
+  };
+  const abrirItem = id => {
+    const p = store.dados.pendencias.get(id);
+    if (!p || p.excluido) return;
+    fecharBusca();
+    if (!passaNosFiltros(p, ui.filtros)) { ui.filtros = filtrosVazios(); guardarFiltros(); } // item escondido pelo filtro
+    definirAberto(id);
+    linhaEl(id)?.scrollIntoView({ block: 'center', behavior: reduzirMovimento() ? 'auto' : 'smooth' });
+  };
+  const ctx = { ui, render, definirTema, verificarArmazenamento, limparTela, aplicarFiltros, abrirItem };
   store.aoMudar(agendar);
   store.aoFalharGravacao(err => avisarErro('Não foi possível salvar neste aparelho', err));
   iniciarPaineis(ctx);
