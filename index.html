@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pendências</title>
+  <meta name="description" content="Suas pendências, num lugar só.">
+  <meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1f24" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/manrope-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Tema antes do primeiro desenho, para não piscar.
+    try {
+      const t = localStorage.getItem('pend.tema');
+      if (t === 'claro') document.documentElement.dataset.theme = 'light';
+      if (t === 'escuro') document.documentElement.dataset.theme = 'dark';
+    } catch (_) {}
+  </script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.8.85-4.2 4.1 1 5.8L12 16.9l-5.2 2.75 1-5.8-4.2-4.1 5.8-.85z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></symbol>
+      <symbol id="i-done" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><path d="M8 12.2l2.7 2.7L16.2 9.4"/></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.8 12.6V5.3c0-.8.7-1.5 1.5-1.5h7.3l7.6 7.6c.6.6.6 1.5 0 2.1l-7.3 7.3c-.6.6-1.5.6-2.1 0z"/><circle cx="8.6" cy="8.6" r="1.4"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2L5.5 5.5"/></symbol>
+      <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 5.5h14v10H10l-5 4z"/></symbol>
+      <symbol id="i-wait" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+      <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M10 7V4.8h4V7M6.5 7l.9 12.2c.1.8.7 1.3 1.5 1.3h6.2c.8 0 1.4-.5 1.5-1.3L17.5 7"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="7" r="1.2"/><circle cx="15" cy="7" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="17" r="1.2"/><circle cx="15" cy="17" r="1.2"/></symbol>
+      <symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="M6.5 14.5L12 9l5.5 5.5"/></symbol>
+      <symbol id="i-plus"viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-group" viewBox="0 0 24 24"><path d="M4 6h7M4 10.5h16M4 15h16M4 19.5h16" /></symbol>
+      <symbol id="i-flat" viewBox="0 0 24 24"><path d="M4 6h16M4 10.5h16M4 15h16M4 19.5h16"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4.5 11.5 9 16"/><path d="M5 11.5h9.5a5 5 0 010 10H12"/></symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18.5h9.8a3.7 3.7 0 00.5-7.4 5.6 5.6 0 00-10.9-1.4A4.4 4.4 0 007.5 18.5z"/></symbol>
+      <!-- Estilo inline com variáveis: seletores da página não alcançam o conteúdo de <use>. -->
+      <symbol id="i-mark" viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="9" style="fill: var(--accent); stroke: none"/><path d="M9.5 16.5l4.3 4.3 8.7-9.6" style="stroke: var(--accent-ink); stroke-width: 3.2"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="bar">
+        <a class="brand" href="./" aria-label="Pendências">
+          <svg class="brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+          <span class="brand-name">Pendências</span>
+        </a>
+        <button class="sync" id="sync" type="button" data-state="local" title="Dados só neste aparelho">
+          <span class="sync-dot"></span><span class="sync-label">Neste aparelho</span>
+        </button>
+        <nav class="tools" aria-label="Ferramentas">
+          <button class="icon-btn" id="btn-busca" type="button" title="Buscar ( / )" aria-label="Buscar"><svg><use href="#i-search"/></svg></button>
+          <button class="icon-btn" data-panel="concluidas" type="button" title="Concluídas" aria-label="Concluídas"><svg><use href="#i-done"/></svg></button>
+          <button class="icon-btn" data-panel="tags" type="button" title="Tags" aria-label="Tags"><svg><use href="#i-tag"/></svg></button>
+          <button class="icon-btn" data-panel="config" type="button" title="Configurações" aria-label="Configurações"><svg><use href="#i-gear"/></svg></button>
+        </nav>
+      </div>
+
+      <!-- Um formulário por campo: com dois campos de texto e sem botão de envio no mesmo form,
+           o navegador não envia ao apertar Enter (regra de "implicit submission" do HTML). -->
+      <div class="capture">
+        <form id="capture" autocomplete="off">
+          <label class="capture-field" data-mode="nova">
+            <svg class="capture-icon" aria-hidden="true"><use href="#i-plus"/></svg>
+            <input id="capture-input" type="text" enterkeyhint="send" spellcheck="true"
+                   placeholder="Nova pendência…" aria-label="Nova pendência">
+            <kbd class="capture-kbd" aria-hidden="true">n</kbd>
+          </label>
+        </form>
+        <form id="busca" role="search" autocomplete="off">
+          <label class="capture-field" data-mode="busca" hidden>
+            <svg class="capture-icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input id="search-input" type="search" enterkeyhint="search"
+                   placeholder="Buscar em títulos e observações…" aria-label="Buscar">
+            <button class="capture-close" id="search-close" type="button" aria-label="Fechar busca"><svg><use href="#i-x"/></svg></button>
+          </label>
+        </form>
+      </div>
+    </header>
+
+    <main class="main" id="main">
+      <div class="chips" id="chips" role="toolbar" aria-label="Filtrar por tag"></div>
+
+      <section class="section section-focus" id="sec-foco" aria-labelledby="h-foco">
+        <h2 class="section-title" id="h-foco"><svg aria-hidden="true"><use href="#i-star"/></svg>Em foco</h2>
+        <div class="zone" id="foco"></div>
+      </section>
+
+      <section class="section section-all" id="sec-todas" aria-labelledby="h-todas">
+        <div class="section-head">
+          <h2 class="section-title" id="h-todas">Todas</h2>
+          <div class="seg" id="modo" role="group" aria-label="Modo da lista">
+            <button type="button" data-modo="agrupar">Agrupar</button>
+            <button type="button" data-modo="corrida">Lista corrida</button>
+          </div>
+        </div>
+        <div id="todas"></div>
+      </section>
+
+      <p class="hint" id="hint">
+        <kbd>n</kbd> nova · <kbd>/</kbd> buscar · <kbd>↑</kbd><kbd>↓</kbd> navegar ·
+        <kbd>Enter</kbd> abrir · <kbd>f</kbd> foco · <kbd>espaço</kbd> concluir
+      </p>
+    </main>
+  </div>
+
+  <dialog class="panel" id="panel" aria-labelledby="panel-title" autofocus tabindex="-1">
+    <div class="panel-grab" aria-hidden="true"><span></span></div>
+    <header class="panel-head">
+      <h2 id="panel-title"></h2>
+      <button class="icon-btn" type="button" data-close aria-label="Fechar"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="panel-body" id="panel-body"></div>
+  </dialog>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>

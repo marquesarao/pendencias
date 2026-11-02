@@ -193,8 +193,101 @@ cria uma URL diferente; use sempre "Gerenciar implantações → Editar".
 
 ## 2. Rodar o app localmente
 
-*(Fatia 3.)*
+O app é estático (HTML + CSS + JS, sem build). Basta servir a pasta por HTTP — abrir o
+`index.html` direto do disco (`file://`) não funciona, porque módulos ES exigem HTTP.
 
-## 3. Publicar no GitHub Pages
+No terminal, dentro da pasta do projeto:
+
+```powershell
+npx serve -l 8137        # Node (baixa o "serve" na primeira vez)
+# ou
+python -m http.server 8137
+```
+
+Abra **http://localhost:8137**. `localhost` é um "contexto seguro" para o navegador, então
+IndexedDB, `crypto.randomUUID` e `navigator.storage.persist()` funcionam como em produção.
+
+- Os dados ficam no IndexedDB **deste navegador, nesta origem** (`localhost:8137`). Outra porta
+  ou outro navegador = outra base, vazia.
+- Para zerar os dados de teste: **Configurações → Armazenamento → Apagar dados deste aparelho**
+  (limpa pendências, observações, tags, fila de envio e o cursor de sincronização; mantém URL,
+  token e preferências).
+- O teste no celular fica para a fatia 5 (GitHub Pages).
+
+## 3. Conectar o app à planilha
+
+1. No app: **Configurações** (engrenagem, ou toque no indicador de status no topo).
+2. Em **Sincronização**, cole a **URL do App da Web** (a que termina em `/exec`, do passo 1.6) e o
+   **token** (passo 1.4). Use "Mostrar" para conferir o token.
+3. **Conectar e sincronizar.**
+   - Se este aparelho já tem dados que nunca foram sincronizados, o app pergunta antes de
+     enviar qualquer coisa: **Enviar para a planilha** · **Apagar e baixar da planilha** ·
+     **Cancelar**. Para dados de teste, escolha **Apagar e baixar** (nada local sobe).
+4. Repita em cada aparelho (desktop, celular), com a **mesma** URL e o **mesmo** token.
+
+A URL e o token ficam só no `localStorage` de cada aparelho — nunca em arquivos do projeto.
+
+**Indicador no topo:** Sincronizado (verde) · Pendente (n) (laranja: alterações aguardando
+envio) · Sincronizando… (pulsando) · Offline (anel vazio) · Erro (vermelho; toque para ver a
+mensagem em Configurações) · Neste aparelho (sem planilha conectada).
+
+**Quando sincroniza:** ao abrir o app; ~2 s depois de cada alteração; ao voltar para a aba; ao
+reconectar à internet; a cada 60 s com a aba visível; e no botão **Sincronizar agora**.
+
+**Conflitos:** vale a alteração mais recente de cada item (last-write-wins por `atualizadoEm`).
+Uma edição feita offline e enviada depois **perde** para uma edição mais nova feita em outro
+aparelho nesse meio-tempo.
+
+## 4. Roteiro de teste da sincronização
+
+Use a planilha real com dois "aparelhos": duas janelas de perfis diferentes do Chrome (ou uma
+normal e uma anônima), ambas em `http://localhost:8137`, conectadas com a mesma URL e token.
+Chame-as de **A** e **B**.
+
+**0. Começar limpo.** Em A, se houver dados de teste: Configurações → **Apagar dados deste
+aparelho** → Apagar. Depois conecte (seção 3). Em B, conecte também. Os dois mostram o mesmo
+conteúdo e o indicador "Sincronizado".
+
+**1. Criar offline e voltar online (em A)**
+1. DevTools (F12) → aba **Network** → seletor de rede → **Offline**. O indicador vira "Offline".
+2. Crie "teste offline 1" e "teste offline 2"; edite o título de um item existente.
+   Indicador: "Offline" (Configurações mostra "N alterações na fila").
+3. Volte para **No throttling**. Em ~1 s o indicador passa por "Sincronizando…" e fica
+   "Sincronizado", sem clicar em nada.
+4. Em B: volte para a janela (ou clique em **Sincronizar agora**). Os itens aparecem.
+5. Na planilha, aba `pendencias`: as linhas novas estão lá, com `servidorEm` preenchido.
+
+**2. Editar o mesmo item nos dois**
+1. Em A, renomeie o item X para "versão A". Espere "Sincronizado".
+2. Em B, renomeie o mesmo item para "versão B". Espere "Sincronizado".
+3. Em A, **Sincronizar agora** → mostra "versão B" (a mais recente vence).
+4. Variante offline: deixe B **Offline**, renomeie X para "B offline"; depois, em A (online),
+   renomeie X para "A depois". Volte B para online → B passa a mostrar "A depois" (a edição
+   offline era mais antiga e foi descartada pela planilha).
+
+**3. Excluir em um e conferir no outro**
+1. Em A, abra um item → **Excluir** → **Excluir**.
+2. Em B, **Sincronizar agora** → o item some.
+3. Na planilha, a linha continua lá com `excluido = TRUE` (a exclusão é lógica, para todos os
+   aparelhos saberem dela).
+
+**4. Conferir a planilha**
+- `pendencias`: `tags` com ids separados por `;`; `foco/feito/aguardando/excluido` em
+  TRUE/FALSE; `atualizadoEm` e `servidorEm` em milissegundos.
+- `observacoes`: crie uma observação "ok algo" em A → linha com `tipo = ok`.
+- `tags`: crie/renomeie uma tag em A → aparece em B com a mesma cor.
+
+**5. Apagar dados com fila pendente**
+1. Em B, fique Offline e edite algo (indicador "Offline", 1 alteração na fila).
+2. Configurações → **Apagar dados deste aparelho**: a confirmação avisa
+   "1 alteração ainda não sincronizada será perdida". Apagar.
+3. A lista fica vazia na hora (sem recarregar). Volte online → B baixa de novo da planilha, sem a
+   edição apagada.
+
+**Erros:** com token errado o indicador fica "Erro" e Configurações mostra
+"Último erro: Token inválido."; corrija o token e salve (não pergunta de novo, porque a URL é a
+mesma).
+
+## 5. Publicar no GitHub Pages
 
 *(Fatia 5.)*
