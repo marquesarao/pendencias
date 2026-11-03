@@ -8,6 +8,8 @@ import * as sync from '../sync.js';
 import * as pwa from '../pwa.js';
 import { desenharResumo, aoClicarResumo, aoMudarResumo } from './resumo.js';
 import { chaveDia, rotuloDia, hhmm, plural } from '../util.js';
+import { listaSomenteLeitura } from './comentarios.js';
+import { apagarTodosRascunhos } from '../rascunhos.js';
 
 const TITULOS = { resumo: 'Resumo', concluidas: 'Concluídas', tags: 'Tags', config: 'Configurações' };
 const NOMES_CORES = {
@@ -27,6 +29,7 @@ const estado = {
   erroConexao: '',
   primeiraVez: null,     // { url, token, n } aguardando a decisão da primeira sincronização
   confirmarApagar: false,
+  comentariosAbertos: new Set(), // Concluídas: itens com os comentários expandidos (só leitura)
 };
 
 export function iniciarPaineis(contexto) {
@@ -71,6 +74,7 @@ export function abrirPainel(nome) {
   estado.erroConexao = '';
   estado.primeiraVez = null;
   estado.confirmarApagar = false;
+  estado.comentariosAbertos = new Set();
   document.getElementById('panel-title').textContent = TITULOS[nome];
   dialog.dataset.painel = nome;
   cancelarFechamento?.(); // reabriu durante a animação de saída: o painel fica aberto
@@ -146,14 +150,27 @@ function painelConcluidas() {
   for (const [dia, itens] of dias) {
     nos.push(h('section', { class: 'day' },
       h('h3', { class: 'p-label' }, rotuloDia(dia), h('span', { class: 'num', text: ` · ${itens.length}` })),
-      h('ul', { class: 'done-list' }, itens.map(p => h('li', { class: 'done-item' },
-        h('span', { class: 'done-check' }, icone('check')),
-        h('span', { class: 'done-main' },
-          h('span', { class: 'done-title', text: p.titulo }),
-          h('span', { class: 'done-meta' },
-            ...store.tagsDe(p).map(t => h('span', { class: 'tag', 'data-cor': t.cor, text: t.nome })),
-            h('span', { class: 'num', text: hhmm(p.feitoEm) }))),
-        h('button', { class: 'btn btn-sm', type: 'button', 'data-act': 'reabrir', 'data-id': p.id }, icone('undo'), 'Reabrir'))))));
+      h('ul', { class: 'done-list' }, itens.map(p => {
+        // Comentários: balão + nº; tocar expande a lista só para leitura (editar = reabrir o item).
+        const comentarios = store.comentariosDe(p.id);
+        const aberto = comentarios.length > 0 && estado.comentariosAbertos.has(p.id);
+        const idLista = `done-cmt-${p.id}`;
+        return h('li', { class: 'done-item' + (aberto ? ' is-aberto' : '') },
+          h('span', { class: 'done-check' }, icone('check')),
+          h('span', { class: 'done-main' },
+            h('span', { class: 'done-title', text: p.titulo }),
+            h('span', { class: 'done-meta' },
+              ...store.tagsDe(p).map(t => h('span', { class: 'tag', 'data-cor': t.cor, text: t.nome })),
+              h('span', { class: 'num', text: hhmm(p.feitoEm) }))),
+          comentarios.length ? h('button', {
+            class: 'done-cmt num', type: 'button', 'data-act': 'done-comentarios', 'data-id': p.id,
+            'aria-expanded': String(aberto), 'aria-controls': aberto ? idLista : null,
+            'aria-label': `${plural(comentarios.length, 'comentário', 'comentários')}. ${aberto ? 'Esconder' : 'Mostrar'}`,
+            title: aberto ? 'Esconder comentários' : 'Mostrar comentários',
+          }, icone('note'), String(comentarios.length)) : null,
+          h('button', { class: 'btn btn-sm', type: 'button', 'data-act': 'reabrir', 'data-id': p.id }, icone('undo'), 'Reabrir'),
+          aberto ? h('div', { class: 'done-cmts', id: idLista }, listaSomenteLeitura(comentarios)) : null);
+      }))));
   }
   if (ocultas) {
     nos.push(h('button', { class: 'btn btn-block', type: 'button', 'data-act': 'mais-concluidas' },
@@ -398,6 +415,12 @@ function aoClicar(e) {
       break;
     }
     case 'mais-concluidas': estado.diasConcluidas += DIAS_POR_PAGINA; break;
+    case 'done-comentarios':
+      if (estado.comentariosAbertos.has(id)) estado.comentariosAbertos.delete(id);
+      else estado.comentariosAbertos.add(id);
+      renderizarPainel(true);
+      corpo.querySelector(`[data-act="done-comentarios"][data-id="${CSS.escape(id)}"]`)?.focus();
+      return;
     case 'paleta': estado.paleta = estado.paleta === id ? null : id; break;
     case 'cor': store.corDaTag(id, b.dataset.valor); estado.paleta = null; break;
     case 'tag-excluir': estado.confirmarTag = id; estado.paleta = null; break;
@@ -479,6 +502,7 @@ async function decidirPrimeiraVez(opcao) {
 // URL/token e preferências (tema, agrupar) ficam no localStorage, intocados.
 async function zerarAparelho() {
   await store.apagarTudo();
+  apagarTodosRascunhos();
   sync.esquecerHistorico();
   ctx.limparTela();
 }

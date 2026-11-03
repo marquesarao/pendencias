@@ -24,7 +24,15 @@ const TABELAS = {
   observacoes: ['id', 'pendenciaId', 'data', 'tipo', 'texto', 'ordem', 'atualizadoEm',
     'excluido', 'servidorEm'],
   tags: ['id', 'nome', 'cor', 'ordem', 'atualizadoEm', 'excluido', 'servidorEm'],
+  // Comentários (registro de reunião/conversa) — aba acrescentada depois, criada por setupSheets().
+  // criadoEm: ISO do momento da criação (o app nunca o muda). editadoEm: vazio = nunca editado.
+  comentarios: ['id', 'pendenciaId', 'criadoEm', 'texto', 'editadoEm', 'atualizadoEm',
+    'excluido', 'servidorEm'],
 };
+// Abas acrescentadas depois da instalação: enquanto setupSheets() não as criar, o pull as trata
+// como vazias (o app continua sincronizando o resto) e o push recusa só as operações delas — que
+// ficam na fila do aparelho até a aba existir.
+const ABAS_OPCIONAIS = ['comentarios'];
 const BOOLEANOS = ['foco', 'feito', 'aguardando', 'excluido'];
 const NUMEROS = ['ordem', 'atualizadoEm', 'servidorEm'];
 const MAX_OPS = 500;
@@ -104,6 +112,10 @@ function pull_(req) {
   const resposta = { ok: true, serverTime: serverTime };
 
   Object.keys(TABELAS).forEach(nome => {
+    if (ABAS_OPCIONAIS.indexOf(nome) >= 0 && !SpreadsheetApp.getActive().getSheetByName(nome)) {
+      resposta[nome] = [];
+      return;
+    }
     const t = lerTabela_(nome);
     resposta[nome] = t.linhas
       .filter(linha => String(linha[t.col.id]).trim() !== '')
@@ -257,7 +269,7 @@ function escreverCelula_(campo, v) {
 // ---------------------------------------------------------------------------
 
 /**
- * Cria as abas pendencias / observacoes / tags e os cabeçalhos, se não existirem.
+ * Cria as abas pendencias / observacoes / tags / comentarios e os cabeçalhos, se não existirem.
  * Pode ser rodada de novo sem risco: só acrescenta o que falta (ex.: a coluna servidorEm)
  * e nunca apaga dados.
  */
@@ -311,7 +323,7 @@ function trocarToken() {
 
 /**
  * Teste de ponta a ponta da API, rodando doPost() aqui mesmo no editor.
- * Grava uma tag de teste com excluido=TRUE (o app a ignora; pode apagar a linha à mão).
+ * Grava uma tag e um comentário de teste com excluido=TRUE (o app os ignora; pode apagar as linhas à mão).
  */
 function testarApi() {
   const token = PropertiesService.getScriptProperties().getProperty('TOKEN');
@@ -362,6 +374,19 @@ function testarApi() {
   r = chamar(json({ token: token, action: 'pull', since: r.serverTime }));
   conferir(r.ok && !r.tags.some(t => t.id === id), 'pull desde o último serverTime não repete a linha', r);
 
-  Logger.log('Todos os testes passaram. A tag de teste "' + id + '" ficou na aba "tags" com ' +
-    'excluido=TRUE (pode apagar a linha à mão).');
+  const idCom = 'teste-' + Utilities.getUuid();
+  const textoCom = 'linha 1\nlinha 2';
+  const com = {
+    id: idCom, pendenciaId: 'teste', criadoEm: new Date(agora).toISOString(), texto: textoCom,
+    editadoEm: '', atualizadoEm: agora, excluido: true,
+  };
+  r = chamar(json({ token: token, action: 'push', ops: [{ table: 'comentarios', row: com }] }));
+  conferir(r.ok && r.results[0].status === 'aplicado', 'push grava comentário (aba comentarios)', r);
+  r = chamar(json({ token: token, action: 'pull', since: agora - 60000 }));
+  const comAchado = r.ok && (r.comentarios || []).filter(c => c.id === idCom)[0];
+  conferir(comAchado && comAchado.texto === textoCom && comAchado.criadoEm === com.criadoEm,
+    'pull devolve o comentário com quebra de linha e criadoEm intactos', r);
+
+  Logger.log('Todos os testes passaram. A tag de teste "' + id + '" (aba "tags") e o comentário de ' +
+    'teste "' + idCom + '" (aba "comentarios") ficaram com excluido=TRUE (pode apagar as linhas à mão).');
 }

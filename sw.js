@@ -2,7 +2,7 @@
 // A cada publicação, AUMENTE A VERSÃO abaixo — é isso que faz os aparelhos baixarem a nova.
 // Todos os caminhos são relativos à pasta do sw.js (funciona em /pendencias/ e em localhost).
 
-const VERSAO = 'v7';
+const VERSAO = 'v8';
 const CACHE = `pendencias-${VERSAO}`;
 
 const SHELL = [
@@ -15,11 +15,13 @@ const SHELL = [
   'js/db.js',
   'js/parse.js',
   'js/pwa.js',
+  'js/rascunhos.js',
   'js/resumo-dados.js',
   'js/store.js',
   'js/sync.js',
   'js/util.js',
   'js/ui/chips.js',
+  'js/ui/comentarios.js',
   'js/ui/dom.js',
   'js/ui/drag.js',
   'js/ui/list.js',

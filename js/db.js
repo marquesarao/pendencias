@@ -1,7 +1,10 @@
 // Wrapper mínimo de IndexedDB, com promessas.
 
 const NOME = 'pendencias';
-const VERSAO = 1;
+// v1: pendencias, observacoes, tags, outbox, meta.
+// v2: + comentarios. A atualização só CRIA o que falta — nunca apaga nem reescreve as outras stores.
+const VERSAO = 2;
+const STORES = ['pendencias', 'observacoes', 'tags', 'comentarios', 'outbox', 'meta'];
 
 let conexao;
 
@@ -13,15 +16,35 @@ const promessa = req => new Promise((ok, falha) => {
 export function abrir() {
   if (conexao) return conexao;
   const req = indexedDB.open(NOME, VERSAO);
-  req.onupgradeneeded = () => {
+  req.onupgradeneeded = e => {
     const db = req.result;
-    db.createObjectStore('pendencias', { keyPath: 'id' });
-    db.createObjectStore('observacoes', { keyPath: 'id' }).createIndex('pendenciaId', 'pendenciaId');
-    db.createObjectStore('tags', { keyPath: 'id' });
-    db.createObjectStore('outbox', { keyPath: 'key' });
-    db.createObjectStore('meta', { keyPath: 'key' });
+    const criar = (nome, keyPath) => {
+      if (!db.objectStoreNames.contains(nome)) return db.createObjectStore(nome, { keyPath });
+      return null;
+    };
+    criar('pendencias', 'id');
+    criar('observacoes', 'id')?.createIndex('pendenciaId', 'pendenciaId');
+    criar('tags', 'id');
+    criar('outbox', 'key');
+    criar('meta', 'key');
+    criar('comentarios', 'id')?.createIndex('pendenciaId', 'pendenciaId');
+    // Vindo da v1: este aparelho nunca guardou comentários, mas o cursor (lastSync) pode já ter
+    // passado por comentários gravados na planilha por outro aparelho. Zerar o cursor faz o
+    // próximo pull trazer tudo uma vez (o last-write-wins torna a repetição inofensiva).
+    if (e.oldVersion >= 1 && e.oldVersion < 2) {
+      req.transaction.objectStore('meta').put({ key: 'lastSync', value: 0 });
+    }
   };
-  conexao = promessa(req);
+  // Outra aba ainda na versão antiga segura o banco: a atualização espera ela fechar.
+  req.onblocked = () => {
+    console.warn('[Pendências] Atualização do banco aguardando outra aba fechar.');
+    window.dispatchEvent(new CustomEvent('pend-banco-bloqueado'));
+  };
+  conexao = promessa(req).then(db => {
+    // Uma versão mais nova do app (outra aba) quer atualizar o banco: solta e recarrega.
+    db.onversionchange = () => { db.close(); location.reload(); };
+    return db;
+  });
   return conexao;
 }
 
@@ -70,12 +93,11 @@ export async function removerDaOutbox(confirmadas) {
   return removidas;
 }
 
-// Apaga tudo deste aparelho: as três tabelas, a outbox e os metadados (lastSync).
+// Apaga tudo deste aparelho: as tabelas, a outbox e os metadados (lastSync).
 export async function limparTudo() {
   const db = await abrir();
-  const stores = ['pendencias', 'observacoes', 'tags', 'outbox', 'meta'];
-  const tx = db.transaction(stores, 'readwrite');
-  for (const s of stores) tx.objectStore(s).clear();
+  const tx = db.transaction(STORES, 'readwrite');
+  for (const s of STORES) tx.objectStore(s).clear();
   return concluir(tx);
 }
 

@@ -106,8 +106,14 @@ export function calcularRelatorio(per, filtroTags) {
     return t ? t.id : 'sem';
   };
   const etapasDe = p => store.observacoesDe(p.id); // sem excluídas
+  // Comentários escritos no período (pela data de criação), do mais antigo para o mais novo.
+  const comentariosDoPeriodo = p => store.comentariosDe(p.id)
+    .filter(c => noPeriodo(diaDe(c.criadoEm), per))
+    .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  // Movimentação no período: o item, uma etapa ou um comentário escrito nele.
   const alteradoNoPeriodo = p =>
-    noPeriodo(diaDe(p.atualizadoEm), per) || etapasDe(p).some(o => noPeriodo(diaDe(o.atualizadoEm), per));
+    noPeriodo(diaDe(p.atualizadoEm), per) || etapasDe(p).some(o => noPeriodo(diaDe(o.atualizadoEm), per)) ||
+    comentariosDoPeriodo(p).length > 0;
 
   const concluidas = ativas.filter(p => p.feito && p.feitoEm && noPeriodo(diaDe(p.feitoEm), per) && passaTag(p))
     .sort((a, b) => a.feitoEm.localeCompare(b.feitoEm));
@@ -131,33 +137,42 @@ export function calcularRelatorio(per, filtroTags) {
     return { lista: e, feitas: e.filter(o => o.tipo === 'ok').length, total: e.length };
   };
   return {
-    periodo: per, grupos, etapasResumo,
+    periodo: per, grupos, etapasResumo, comentariosDoPeriodo,
     totais: { concluidas: concluidas.length, andamento: andamento.length, aguardando: aguardando.length },
   };
 }
 
-/** Texto simples para a área de transferência (formato combinado com o usuário). */
-export function textoRelatorio(rel) {
-  const dm = iso => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`; };
+/**
+ * Texto simples para a área de transferência (formato combinado com o usuário).
+ * Com comentários: sob cada item, "    03/11 10:14 — texto", linhas seguintes recuadas.
+ */
+export function textoRelatorio(rel, { comentarios = false } = {}) {
+  const dois = n => String(n).padStart(2, '0');
+  const dm = iso => { const d = new Date(iso); return `${dois(d.getDate())}/${dois(d.getMonth() + 1)}`; };
+  const dmh = iso => { const d = new Date(iso); return `${dm(iso)} ${dois(d.getHours())}:${dois(d.getMinutes())}`; };
+  const comDoItem = p => (comentarios ? rel.comentariosDoPeriodo(p).map(c => {
+    const [primeira, ...resto] = c.texto.split(/\r?\n/);
+    return [`    ${dmh(c.criadoEm)} — ${primeira}`, ...resto.map(l => `      ${l}`)].join('\n');
+  }) : []);
   const blocos = rel.grupos.map(g => {
     const linhas = [`${g.tag ? g.tag.nome : 'Sem tag'} — ${rel.periodo.rotulo}`];
     if (g.concluidas.length) {
       linhas.push('Concluídas:');
       for (const p of g.concluidas) {
         const e = rel.etapasResumo(p);
-        linhas.push(`• ${p.titulo}${e.total ? ` (${e.feitas}/${e.total} etapas)` : ''} — ${dm(p.feitoEm)}`);
+        linhas.push(`• ${p.titulo}${e.total ? ` (${e.feitas}/${e.total} etapas)` : ''} — ${dm(p.feitoEm)}`, ...comDoItem(p));
       }
     }
     if (g.andamento.length) {
       linhas.push('Em andamento:');
       for (const p of g.andamento) {
         const e = rel.etapasResumo(p);
-        linhas.push(`• ${p.titulo}${e.total ? ` — ${e.feitas}/${e.total} etapas` : ''}`);
+        linhas.push(`• ${p.titulo}${e.total ? ` — ${e.feitas}/${e.total} etapas` : ''}`, ...comDoItem(p));
       }
     }
     if (g.aguardando.length) {
       linhas.push('Aguardando:');
-      for (const p of g.aguardando) linhas.push(`• ${p.titulo} — ${p.aguardandoEm ? `desde ${dm(p.aguardandoEm)}` : 'sem data'}`);
+      for (const p of g.aguardando) linhas.push(`• ${p.titulo} — ${p.aguardandoEm ? `desde ${dm(p.aguardandoEm)}` : 'sem data'}`, ...comDoItem(p));
     }
     return linhas.join('\n');
   });

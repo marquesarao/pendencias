@@ -92,9 +92,13 @@ function daRede(table, r) {
     // Planilha ainda sem a coluna (Code.gs antigo) → sem data; o app mostra "aguardando" sem contador.
     row.aguardandoEm = String(r.aguardandoEm || '');
   }
+  if (table === 'comentarios') {
+    for (const c of ['criadoEm', 'texto', 'editadoEm']) row[c] = String(r[c] || '');
+  } else {
+    row.ordem = Number(r.ordem) || 0;
+  }
   row.excluido = r.excluido === true;
   row.atualizadoEm = Number(r.atualizadoEm) || 0;
-  row.ordem = Number(r.ordem) || 0;
   return row;
 }
 
@@ -146,13 +150,18 @@ async function enviar() {
     await store.confirmarEnvio(confirmadas);
   }
   // Uma op recusada não trava o resto: fica na fila e vira aviso, mas o pull acontece.
-  return errosOps.length ? `${errosOps.length} alteração(ões) recusada(s) pela planilha: ${errosOps[0]}` : '';
+  if (!errosOps.length) return '';
+  // Apps Script ainda na versão sem comentários (ou sem a aba): nada se perde, a fila espera.
+  if (errosOps.every(m => /comentarios/.test(m))) {
+    return `${errosOps.length} comentário(s) aguardando: atualize o Apps Script da planilha (veja o README) e rode setupSheets(). Nada foi perdido.`;
+  }
+  return `${errosOps.length} alteração(ões) recusada(s) pela planilha: ${errosOps[0]}`;
 }
 
 async function receber() {
   const resp = await chamar({ action: 'pull', since: estado.lastSync || 0 });
   // Tags primeiro: as pendências se referem a elas.
-  for (const table of ['tags', 'pendencias', 'observacoes']) {
+  for (const table of ['tags', 'pendencias', 'observacoes', 'comentarios']) {
     await store.aplicarRemoto(table, (resp[table] || []).map(r => daRede(table, r)));
   }
   estado.lastSync = resp.serverTime;

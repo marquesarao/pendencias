@@ -2,8 +2,12 @@
 // Na interface as "observações" se chamam "Etapas" (dados continuam em "observacoes").
 
 import { h, icone, realcar, trecho, contem, reconciliar } from './dom.js';
-import { tagsDe, tagsAtivas, observacoesDe } from '../store.js';
+import { tagsDe, tagsAtivas, observacoesDe, comentariosDe, MAX_COMENTARIO } from '../store.js';
 import { ddmm, situacaoPrazo, rotuloPrazo, diasDesde, DIAS_ALERTA_AGUARDANDO } from '../util.js';
+import { lerRascunho } from '../rascunhos.js';
+import { textoComLinks, rotuloComentario, dataHora } from './comentarios.js';
+
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 const MAX_TAGS_LINHA = 2;
 
@@ -40,7 +44,8 @@ function textoEspera(p) {
  * @param {HTMLElement} el
  * @param {object} p pendência
  * @param {object} o { ocultarPrimeiraTag, termo (normalizado), aberto, selecionado, confirmar,
- *                     editandoTitulo, tagsAbertas, editandoEtapa (id da etapa em edição) }
+ *                     editandoTitulo, tagsAbertas, editandoEtapa (id da etapa em edição),
+ *                     editandoComentario, confirmarComentario, comentariosAbertos (Set) }
  */
 export function atualizarLinha(el, p, o) {
   el.classList.toggle('is-done', p.feito);
@@ -85,14 +90,19 @@ export function atualizarLinha(el, p, o) {
   // Indicadores
   const etapas = observacoesDe(p.id);
   const feitas = etapas.filter(x => x.tipo === 'ok').length;
+  const comentarios = comentariosDe(p.id);
   const meta = [];
   if (o.termo && !contem(p.titulo, o.termo)) {
-    const achada = etapas.find(x => contem(x.texto, o.termo));
-    if (achada) meta.push(h('span', { class: 'meta-trecho' }, realcar(trecho(achada.texto, o.termo), o.termo)));
+    const achada = etapas.find(x => contem(x.texto, o.termo)) || comentarios.find(x => contem(x.texto, o.termo));
+    if (achada) meta.push(h('span', { class: 'meta-trecho' }, realcar(trecho(achada.texto.replace(/\s+/g, ' '), o.termo), o.termo)));
   }
   if (etapas.length) {
     meta.push(h('span', { class: 'meta-item num', title: `Etapas: ${feitas} de ${etapas.length} feitas` },
       icone('etapas'), `${feitas}/${etapas.length}`));
+  }
+  if (comentarios.length) {
+    meta.push(h('span', { class: 'meta-item num', title: `Comentários: ${comentarios.length}` },
+      icone('note'), String(comentarios.length)));
   }
   if (p.aguardando) {
     const { texto, dias } = textoEspera(p);
@@ -111,14 +121,18 @@ export function atualizarLinha(el, p, o) {
   // Detalhe
   let det = el.querySelector('.detail');
   if (o.aberto) {
-    if (!det) { det = criarDetalhe(); el.append(det); }
-    atualizarDetalhe(det, p, etapas, feitas, o);
+    if (!det) {
+      det = criarDetalhe();
+      det.querySelector('.cmt-campo').value = lerRascunho(p.id); // anotação não enviada volta
+      el.append(det);
+    }
+    atualizarDetalhe(det, p, etapas, feitas, comentarios, o);
   } else if (det) {
     det.remove();
   }
 }
 
-// Ordem: ETAPAS → TAGS → Prazo/Aguardando → Excluir (o título fica no cabeçalho).
+// Ordem: ETAPAS → COMENTÁRIOS → TAGS → Prazo/Aguardando → Excluir (o título fica no cabeçalho).
 function criarDetalhe() {
   return h('div', { class: 'detail' },
     h('section', { class: 'd-sec d-etapas', 'aria-label': 'Etapas' },
@@ -129,6 +143,19 @@ function criarDetalhe() {
         h('form', { class: 'obs-new', 'data-form': 'obs', autocomplete: 'off' },
           icone('plus'),
           h('input', { type: 'text', 'data-campo': 'obs', placeholder: 'Nova etapa…  (“ok …” = já feita)', 'aria-label': 'Nova etapa', enterkeyhint: 'send' })))),
+    // COMENTÁRIOS: registro do que foi falado. Enter quebra linha; Ctrl+Enter (ou o botão) adiciona.
+    h('section', { class: 'd-sec d-coment', 'aria-label': 'Comentários' },
+      h('div', { class: 'd-cab' }, h('span', { class: 'd-label', text: 'Comentários' }), h('span', { class: 'd-cont num' })),
+      h('form', { class: 'cmt-novo', 'data-form': 'cmt', autocomplete: 'off' },
+        h('textarea', {
+          class: 'cmt-campo', 'data-campo': 'cmt', rows: 2, placeholder: 'Escreva o que foi falado…',
+          'aria-label': 'Novo comentário', 'aria-keyshortcuts': MAC ? 'Meta+Enter' : 'Control+Enter', spellcheck: 'true',
+        }),
+        h('div', { class: 'cmt-barra' },
+          h('span', { class: 'cmt-limite num', 'aria-live': 'polite' }),
+          h('span', { class: 'cmt-dica' }, h('kbd', { text: MAC ? '⌘' : 'Ctrl' }), '+', h('kbd', { text: 'Enter' }), ' adiciona'),
+          h('button', { class: 'btn btn-sm btn-primary cmt-adicionar', type: 'submit', text: 'Adicionar' }))),
+      h('ul', { class: 'cmt-lista' })),
     h('section', { class: 'd-sec d-tags-sec', 'aria-label': 'Tags' },
       h('div', { class: 'd-cab' }, h('span', { class: 'd-label', text: 'Tags' })),
       h('div', { class: 'd-tags' })),
@@ -136,9 +163,9 @@ function criarDetalhe() {
     h('section', { class: 'd-sec d-fim' }));
 }
 
-function atualizarDetalhe(det, p, etapas, feitas, o) {
+function atualizarDetalhe(det, p, etapas, feitas, comentarios, o) {
   // ETAPAS
-  det.querySelector('.d-cont').textContent = etapas.length ? `${feitas}/${etapas.length}` : '';
+  det.querySelector('.d-etapas .d-cont').textContent = etapas.length ? `${feitas}/${etapas.length}` : '';
   // Linhas reaproveitadas por id (não recriadas a cada render): um campo em edição não perde o
   // foco, e o toque em outra etapa não é "engolido" quando a edição anterior salva e redesenha.
   const lista = det.querySelector('.obs-list');
@@ -146,6 +173,18 @@ function atualizarDetalhe(det, p, etapas, feitas, o) {
   reconciliar(lista, etapas.map(x => {
     const li = existentes.get(x.id) || criarEtapa(x.id);
     atualizarEtapa(li, x, o);
+    return li;
+  }));
+
+  // COMENTÁRIOS (mais recente primeiro); itens reaproveitados por id, como as etapas — a edição
+  // aberta não perde o foco quando chega uma sincronização.
+  det.querySelector('.d-coment .d-cont').textContent = comentarios.length ? String(comentarios.length) : '';
+  atualizarContador(det.querySelector('.cmt-campo'));
+  const listaC = det.querySelector('.cmt-lista');
+  const existentesC = new Map([...listaC.children].map(li => [li.dataset.cmt, li]));
+  reconciliar(listaC, comentarios.map(c => {
+    const li = existentesC.get(c.id) || criarComentario(c.id);
+    atualizarComentario(li, c, o);
     return li;
   }));
 
@@ -235,6 +274,98 @@ function atualizarEtapa(li, x, o) {
     texto.setAttribute('aria-label', `Editar etapa: ${x.texto}`);
     texto.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown'); // mover a etapa
   }
+}
+
+function criarComentario(id) {
+  return h('li', { class: 'cmt', 'data-cmt': id },
+    h('div', { class: 'cmt-cab' }, h('span', { class: 'cmt-data num' }), h('span', { class: 'cmt-acoes' })),
+    h('div', { class: 'cmt-corpo' }),
+    h('div', { class: 'cmt-pe' }));
+}
+
+// Modos: "ver" (texto + Editar/Excluir), "editar" (campo + Salvar/Cancelar), "confirmar" (excluir?).
+function atualizarComentario(li, c, o) {
+  const modo = o.editandoComentario === c.id ? 'editar' : o.confirmarComentario === c.id ? 'confirmar' : 'ver';
+  const quando = dataHora(c.criadoEm);
+  const data = li.querySelector('.cmt-data');
+  data.textContent = rotuloComentario(c);
+  data.title = c.editadoEm ? `Escrito em ${quando}; editado em ${dataHora(c.editadoEm)}` : `Escrito em ${quando}`;
+
+  const corpo = li.querySelector('.cmt-corpo');
+  const acoes = li.querySelector('.cmt-acoes');
+  const pe = li.querySelector('.cmt-pe');
+  const mudouModo = li.dataset.estado !== modo;
+  li.dataset.estado = modo;
+
+  if (modo === 'editar') {
+    if (mudouModo || !corpo.querySelector('.cmt-edit')) {
+      const ta = h('textarea', { class: 'cmt-edit', rows: 2, 'aria-label': `Editar comentário de ${quando}`, spellcheck: 'true' });
+      ta.value = c.texto;
+      corpo.replaceChildren(ta);
+      acoes.replaceChildren();
+      pe.replaceChildren(h('div', { class: 'cmt-barra' },
+        h('span', { class: 'cmt-limite num', 'aria-live': 'polite' }),
+        h('button', { class: 'btn btn-sm', type: 'button', 'data-act': 'cmt-cancelar', text: 'Cancelar' }),
+        h('button', { class: 'btn btn-sm btn-primary', type: 'button', 'data-act': 'cmt-salvar', text: 'Salvar' })));
+    }
+    return; // o campo não é tocado enquanto se edita
+  }
+
+  // Texto: só redesenha se mudou (um link ou "Ver tudo" focado não perde o foco à toa).
+  const aberto = o.comentariosAbertos.has(c.id);
+  const chave = `${c.texto}\u0000${o.termo || ''}`;
+  let texto = corpo.querySelector('.cmt-texto');
+  if (mudouModo || !texto) {
+    texto = h('div', { class: 'cmt-texto' });
+    corpo.replaceChildren(texto, h('button', { class: 'cmt-mais', type: 'button', 'data-act': 'cmt-mais', hidden: true }));
+  }
+  if (texto.dataset.chave !== chave) {
+    texto.replaceChildren(textoComLinks(c.texto, o.termo));
+    texto.dataset.chave = chave;
+  }
+  texto.classList.toggle('is-aberto', aberto);
+  const mais = corpo.querySelector('.cmt-mais');
+  mais.textContent = aberto ? 'Ver menos' : 'Ver tudo';
+  mais.setAttribute('aria-expanded', String(aberto));
+
+  if (modo === 'confirmar') {
+    acoes.replaceChildren();
+    if (mudouModo) {
+      pe.replaceChildren(h('span', { class: 'confirm' },
+        h('span', { text: 'Excluir este comentário?' }),
+        h('button', { class: 'btn btn-sm btn-danger', type: 'button', 'data-act': 'cmt-excluir-sim', text: 'Excluir' }),
+        h('button', { class: 'btn btn-sm', type: 'button', 'data-act': 'cmt-excluir-nao', text: 'Cancelar' })));
+    }
+  } else if (mudouModo || !acoes.children.length) {
+    acoes.replaceChildren(
+      h('button', { class: 'cmt-acao', type: 'button', 'data-act': 'cmt-editar', 'aria-label': `Editar comentário de ${quando}`, text: 'Editar' }),
+      h('button', { class: 'cmt-acao cmt-acao-excluir', type: 'button', 'data-act': 'cmt-excluir', 'aria-label': `Excluir comentário de ${quando}`, text: 'Excluir' }));
+    pe.replaceChildren();
+  }
+}
+
+/**
+ * Depois do desenho: "Ver tudo" só aparece se o texto recolhido (6 linhas) realmente corta algo.
+ * Precisa do elemento na página para medir.
+ */
+export function medirComentarios(raiz) {
+  for (const mais of raiz.querySelectorAll('.cmt-mais')) {
+    const texto = mais.previousElementSibling;
+    mais.hidden = texto.classList.contains('is-aberto') ? false : texto.scrollHeight <= texto.clientHeight + 1;
+  }
+}
+
+/** Campo de comentário (novo ou em edição): contador perto do limite; "Adicionar" só com texto. */
+export function atualizarContador(campo) {
+  const n = campo.value.length;
+  const caixa = campo.closest('.cmt-novo, .cmt');
+  const limite = caixa?.querySelector('.cmt-limite');
+  if (limite) {
+    limite.textContent = n > MAX_COMENTARIO * 0.9 ? `${n.toLocaleString('pt-BR')} / ${MAX_COMENTARIO.toLocaleString('pt-BR')}` : '';
+    limite.classList.toggle('is-alerta', n > MAX_COMENTARIO);
+  }
+  const botao = caixa?.querySelector('.cmt-adicionar');
+  if (botao) botao.disabled = !campo.value.trim();
 }
 
 export function ajustarAltura(ta) {

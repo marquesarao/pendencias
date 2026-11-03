@@ -1,8 +1,8 @@
 // Seções "Em foco" e "Todas": seleção do que aparece, agrupamento, estados vazios.
 
 import { h, icone, reconciliar, contem } from './dom.js';
-import { criarLinha, atualizarLinha, ajustarAltura } from './row.js';
-import { pendenciasAtivas, tagsDe, tagsAtivas, observacoesDe } from '../store.js';
+import { criarLinha, atualizarLinha, ajustarAltura, medirComentarios } from './row.js';
+import { pendenciasAtivas, tagsDe, tagsAtivas, observacoesDe, comentariosDe } from '../store.js';
 import { ehHoje, temFiltro, passaNosFiltros } from '../util.js';
 
 const linhas = new Map(); // id → elemento (reaproveitado entre renders)
@@ -27,7 +27,8 @@ const abertasPrimeiro = (a, b) => (a.feito - b.feito) || (a.ordem - b.ordem);
 
 export function corresponde(p, termo) {
   if (!termo) return true;
-  return contem(p.titulo, termo) || observacoesDe(p.id).some(o => contem(o.texto, termo));
+  return contem(p.titulo, termo) || observacoesDe(p.id).some(o => contem(o.texto, termo)) ||
+    comentariosDe(p.id).some(c => contem(c.texto, termo));
 }
 
 /**
@@ -50,6 +51,8 @@ export function renderizarLista(ui) {
     ocultarPrimeiraTag, termo, aberto: ui.aberto === p.id, selecionado: ui.selecionado === p.id,
     confirmar: ui.confirmarExclusao === p.id, editandoTitulo: ui.editandoTitulo === p.id,
     tagsAbertas: ui.tagsAbertas === p.id, editandoEtapa: ui.editandoEtapa,
+    editandoComentario: ui.editandoComentario, confirmarComentario: ui.confirmarComentario,
+    comentariosAbertos: ui.comentariosAbertos,
   });
   const montar = (lista, ocultar) => lista.map(p => {
     const el = linhaDe(p.id);
@@ -101,7 +104,9 @@ export function renderizarLista(ui) {
   const usados = new Set(ordemTela);
   for (const id of linhas.keys()) if (!usados.has(id)) linhas.delete(id);
 
-  document.querySelectorAll('.row.is-editing .title-edit, .obs-edit').forEach(ajustarAltura);
+  document.querySelectorAll('.row.is-editing .title-edit, .obs-edit, .row.is-open .cmt-campo, .cmt-edit').forEach(ajustarAltura);
+  const aberto = ui.aberto && linhas.get(ui.aberto);
+  if (aberto) medirComentarios(aberto);
   return ordemTela;
 }
 

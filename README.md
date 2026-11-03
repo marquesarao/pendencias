@@ -31,9 +31,9 @@ fica vinculado à planilha e não precisa do ID dela no código.
 1. Na barra de cima, no seletor de função (ao lado de **Depurar**), escolha `setupSheets`.
 2. Clique em **Executar**.
 3. Na primeira execução o Google pede autorização — veja [1.3](#13-autorizações-da-primeira-execução).
-4. No **Registro de execução** devem aparecer três linhas, uma por aba
-   (`pendencias`, `observacoes`, `tags`), com as colunas criadas.
-5. Confira na planilha: três abas novas, linha 1 em negrito e congelada. A aba vazia padrão
+4. No **Registro de execução** devem aparecer quatro linhas, uma por aba
+   (`pendencias`, `observacoes`, `tags`, `comentarios`), com as colunas criadas.
+5. Confira na planilha: quatro abas novas, linha 1 em negrito e congelada. A aba vazia padrão
    (ex.: "Página1") pode ser apagada.
 
 `setupSheets()` pode ser rodada de novo sem risco: só acrescenta o que falta e nunca apaga dados.
@@ -82,9 +82,11 @@ ficar público no GitHub sem problema. Para consultá-lo depois, abra essa tela.
    - corpo que não é JSON e ação desconhecida são recusados;
    - push grava linha nova; push mais antigo é ignorado (last-write-wins); push mais novo atualiza;
    - op com tabela desconhecida volta como erro sem derrubar o envio;
-   - pull devolve a versão mais nova e não repete a linha no pull seguinte.
-3. O teste deixa uma linha na aba `tags` com nome "teste da API (editado)" e
-   `excluido = TRUE`. O app ignora linhas excluídas; pode apagá-la à mão.
+   - pull devolve a versão mais nova e não repete a linha no pull seguinte;
+   - push grava um comentário e o pull o devolve com a quebra de linha e o `criadoEm` intactos.
+3. O teste deixa uma linha na aba `tags` com nome "teste da API (editado)" e uma na aba
+   `comentarios` (texto "linha 1 / linha 2"), as duas com `excluido = TRUE`. O app ignora
+   linhas excluídas; pode apagá-las à mão.
 
 Esse teste roda a função `doPost()` dentro do editor. O teste "de verdade", pela internet, vem
 depois de publicar (1.7).
@@ -203,7 +205,37 @@ Por que nessa ordem:
 - Aparelhos que ainda estão com o app antigo (antes de tocar em "Atualizar") **não apagam** o
   campo novo: o Apps Script mantém o valor de qualquer coluna que não venha no envio.
 
-### 1.10 Problemas comuns
+### 1.10 Comentários: aba nova `comentarios` (cache v8)
+
+A v8 do app grava os comentários numa **aba nova**. Ordem exata — **Apps Script primeiro**:
+
+1. Abra a planilha → **Extensões → Apps Script**.
+2. Cole o `apps-script/Code.gs` novo inteiro (substituindo tudo) e **salve** (Ctrl+S).
+3. Escolha **`setupSheets`** → **Executar**. Confira no registro:
+   `Aba "comentarios": colunas criadas: id, pendenciaId, criadoEm, texto, editadoEm, atualizadoEm, excluido, servidorEm.`
+   As outras abas aparecem como "já estava completa" — nada nelas é tocado.
+4. Rode **`testarApi`** → "Todos os testes passaram" (inclui o teste do comentário).
+5. **Implantar → Gerenciar implantações → lápis (Editar) → Versão: Nova versão → Implantar.**
+   A URL `/exec` continua a mesma (1.8).
+6. Só então publique o app v8 (seção 5.4).
+7. Em **cada aparelho**, aceite "Nova versão disponível · Atualizar" e confira **v8** em
+   Configurações → Aplicativo. Feche outras abas do app abertas no mesmo navegador (o banco do
+   aparelho passa da versão 1 para a 2 e espera as abas antigas fecharem).
+
+O que acontece se algo ficar fora de ordem (testado):
+
+- **App antigo (v7) + Code.gs novo:** a v7 simplesmente não lê a aba `comentarios` — sem erro,
+  sem mostrar comentário como etapa, contador de etapas intacto.
+- **App v8 + Code.gs antigo** (ou novo sem o `setupSheets`): o comentário fica salvo no aparelho
+  e **na fila**; o indicador mostra "Erro" com a mensagem "comentário(s) aguardando: atualize o
+  Apps Script…". O resto (itens, etapas, tags) continua sincronizando. Assim que o script novo
+  for publicado e a aba existir, a fila sobe sozinha — uma linha por comentário, sem perda nem
+  duplicação.
+- **Aparelho que passou um tempo na v7** depois de outro já ter escrito comentários: ao atualizar
+  para a v8, o app baixa tudo da planilha uma vez (o cursor de sincronização é zerado na
+  atualização do banco), então os comentários antigos chegam.
+
+### 1.11 Problemas comuns
 
 | Resposta / sintoma | Causa e solução |
 |---|---|
@@ -214,6 +246,8 @@ Por que nessa ordem:
 | Página HTML do Google em vez de JSON | URL errada (`/dev` ou sem `/exec`), ou acesso não está como "Qualquer pessoa". |
 | `Script function not found: doGet` | A URL foi aberta no navegador (GET). Normal: a API só aceita POST. |
 | Mudança no código não surtiu efeito | Faltou republicar com **Nova versão** (1.8). |
+| App: "comentário(s) aguardando: atualize o Apps Script" | Faltou a seção 1.10 (Code.gs novo + `setupSheets` + Nova versão). Nada se perde: a fila sobe depois. |
+| App: "Há outra aba do Pendências aberta com a versão anterior" | Feche as outras abas do app; a atualização do banco do aparelho termina sozinha. |
 
 ---
 
@@ -305,6 +339,9 @@ conteúdo e o indicador "Sincronizado".
   TRUE/FALSE; `atualizadoEm` e `servidorEm` em milissegundos.
 - `observacoes` (as "Etapas" do app): crie uma etapa "ok algo" em A → linha com `tipo = ok`.
 - `tags`: crie/renomeie uma tag em A → aparece em B com a mesma cor.
+- `comentarios`: escreva um comentário com duas linhas em A → uma linha com o texto (quebra
+  preservada), `criadoEm` em ISO e `editadoEm` vazio. Edite em A → `criadoEm` igual,
+  `editadoEm` preenchido; em B aparece "editado em …".
 
 **5. Apagar dados com fila pendente**
 1. Em B, fique Offline e edite algo (indicador "Offline", 1 alteração na fila).

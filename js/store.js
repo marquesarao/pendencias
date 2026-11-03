@@ -4,14 +4,18 @@
 import * as db from './db.js';
 import { uuid, normalizar } from './util.js';
 
-export const TABELAS = ['pendencias', 'observacoes', 'tags'];
+export const TABELAS = ['pendencias', 'observacoes', 'tags', 'comentarios'];
 export const CORES = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'];
 
 export const dados = {
   pendencias: new Map(),
   observacoes: new Map(),
   tags: new Map(),
+  comentarios: new Map(),
 };
+
+// Limite de caracteres de uma célula do Google Sheets (o Code.gs recusa acima disso).
+export const MAX_COMENTARIO = 50000;
 
 // Espelho em memória da outbox: chave "tabela:id" → atualizadoEm da versão na fila.
 const pendentes = new Map();
@@ -161,6 +165,13 @@ export function observacoesDe(pendenciaId) {
     .sort(porOrdem);
 }
 
+// Comentários do item, do mais recente para o mais antigo (sem excluídos).
+export function comentariosDe(pendenciaId) {
+  return [...dados.comentarios.values()]
+    .filter(c => c.pendenciaId === pendenciaId && !c.excluido)
+    .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+}
+
 export function buscarTagPorNome(nome) {
   const alvo = normalizar(nome);
   return tagsAtivas().find(t => normalizar(t.nome) === alvo) || null;
@@ -295,6 +306,35 @@ export function moverObservacao(id, antesId, depoisId, ordemIds) {
 export function excluirObservacao(id, excluido = true) {
   const novo = alterar('observacoes', id, { excluido });
   if (novo) persistir([['observacoes', novo]]);
+  return novo;
+}
+
+// ---------------------------------------------------------------------------
+// Comentários (registro de reunião/conversa). criadoEm nunca muda; editadoEm só muda quando o
+// texto muda de fato (excluir/desfazer não conta como edição).
+// ---------------------------------------------------------------------------
+
+export function criarComentario(pendenciaId, texto) {
+  const agora = Date.now();
+  const c = inserir('comentarios', {
+    id: uuid(), pendenciaId, criadoEm: new Date(agora).toISOString(), texto, editadoEm: '',
+    atualizadoEm: agora, excluido: false,
+  });
+  persistir([['comentarios', c]]);
+  return c;
+}
+
+export function editarComentario(id, texto) {
+  const atual = dados.comentarios.get(id);
+  if (!atual || atual.texto === texto) return atual || null;
+  const novo = alterar('comentarios', id, { texto, editadoEm: new Date().toISOString() });
+  persistir([['comentarios', novo]]);
+  return novo;
+}
+
+export function excluirComentario(id, excluido = true) {
+  const novo = alterar('comentarios', id, { excluido });
+  if (novo) persistir([['comentarios', novo]]);
   return novo;
 }
 

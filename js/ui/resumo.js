@@ -5,6 +5,7 @@ import { h, icone } from './dom.js';
 import { toast } from './toast.js';
 import * as store from '../store.js';
 import { ddmm, DIAS_ALERTA_AGUARDANDO } from '../util.js';
+import { textoComLinks, dataHoraCurta } from './comentarios.js';
 import { calcularResumo, calcularRelatorio, textoRelatorio, periodo, PERIODOS } from '../resumo-dados.js';
 
 const ler = (k, padrao) => { try { return localStorage.getItem(k) ?? padrao; } catch (_) { return padrao; } };
@@ -14,6 +15,7 @@ const estado = {
   aba: ler('pend.resumoAba', 'resumo') === 'relatorio' ? 'relatorio' : 'resumo', // lembrada no aparelho
   periodo: 'semana', de: '', ate: '',
   tags: [], // filtro do relatório (OU); vazio = todas
+  comentarios: ler('pend.relComentarios', '') === '1', // "Incluir comentários": desligado por padrão
 };
 
 /** Abre o painel já numa aba/período (ex.: cartão "Concluídas na semana"). */
@@ -140,7 +142,12 @@ function abaRelatorio() {
       ...tags.map(t => h('button', {
         type: 'button', class: 'chip chip-sm chip-tag', 'data-act': 'rel-tag', 'data-valor': t.id, 'data-cor': t.cor,
         'aria-pressed': String(estado.tags.includes(t.id)),
-      }, h('span', { class: 'dot' }), icone('check', 'chip-check'), t.nome))) : null);
+      }, h('span', { class: 'dot' }), icone('check', 'chip-check'), t.nome))) : null,
+    h('div', { class: 'rel-linha' },
+      h('button', {
+        type: 'button', class: 'chip chip-sm rel-opcao', 'data-act': 'rel-comentarios', 'data-valor': '',
+        'aria-pressed': String(estado.comentarios),
+      }, icone('check', 'chip-check'), icone('note', 'rel-opcao-icone'), 'Incluir comentários')));
 
   const { concluidas, andamento, aguardando } = rel.totais;
   const topo = h('div', { class: 'rel-topo' },
@@ -154,10 +161,14 @@ function abaRelatorio() {
 
   const item = (p, detalhe, comEtapas) => {
     const e = rel.etapasResumo(p);
+    const coms = estado.comentarios ? rel.comentariosDoPeriodo(p) : [];
     return h('li', { class: 'rel-item' },
       h('div', { class: 'rel-item-l' }, h('span', { class: 'rel-item-t', text: p.titulo }), h('span', { class: 'rel-item-d num', text: detalhe(e) })),
       comEtapas && e.total ? h('ul', { class: 'rel-etapas' }, ...e.lista.map(o => h('li', { class: o.tipo === 'ok' ? 'is-ok' : '' },
-        h('span', { class: 'rel-etapa-m', 'aria-label': o.tipo === 'ok' ? 'feita' : 'em aberto', text: o.tipo === 'ok' ? '✓' : '○' }), o.texto))) : null);
+        h('span', { class: 'rel-etapa-m', 'aria-label': o.tipo === 'ok' ? 'feita' : 'em aberto', text: o.tipo === 'ok' ? '✓' : '○' }), o.texto))) : null,
+      coms.length ? h('ul', { class: 'rel-coments', 'aria-label': 'Comentários do período' }, ...coms.map(c => h('li', {},
+        h('span', { class: 'rel-coment-d num', text: dataHoraCurta(c.criadoEm) }),
+        h('span', { class: 'rel-coment-t' }, textoComLinks(c.texto, ''))))) : null);
   };
   const secao = (titulo, lista, fn) => (lista.length ? h('div', { class: 'rel-sec' }, h('h4', { class: 'rel-sec-t', text: titulo }), h('ul', { class: 'rel-lista' }, ...lista.map(fn))) : null);
 
@@ -171,7 +182,7 @@ function abaRelatorio() {
 }
 
 async function copiar() {
-  const texto = textoRelatorio(calcularRelatorio(periodo(estado.periodo, estado.de, estado.ate), estado.tags));
+  const texto = textoRelatorio(calcularRelatorio(periodo(estado.periodo, estado.de, estado.ate), estado.tags), { comentarios: estado.comentarios });
   try {
     await navigator.clipboard.writeText(texto);
   } catch (_) {
@@ -208,6 +219,10 @@ export function aoClicarResumo(b, acoes) {
     case 'rel-periodo': estado.periodo = v; break;
     case 'rel-tag':
       estado.tags = !v ? [] : estado.tags.includes(v) ? estado.tags.filter(t => t !== v) : [...estado.tags, v];
+      break;
+    case 'rel-comentarios':
+      estado.comentarios = !estado.comentarios;
+      guardar('pend.relComentarios', estado.comentarios ? '1' : '');
       break;
     case 'rel-copiar': copiar(); return;
     default: return;

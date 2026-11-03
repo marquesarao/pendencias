@@ -10,7 +10,8 @@ import { iniciarPaineis, abrirPainel, renderizarPainel, quando } from './ui/pane
 import { iniciarBusca, abrirBusca, fecharBusca } from './ui/search.js';
 import { arrastavel } from './ui/drag.js';
 import { toast } from './ui/toast.js';
-import { ajustarAltura } from './ui/row.js';
+import { ajustarAltura, atualizarContador } from './ui/row.js';
+import { gravarRascunho, agendarRascunho, apagarRascunho, idsComRascunho } from './rascunhos.js';
 import { h, reduzirMovimento } from './ui/dom.js';
 import { chaveDia, FILTRO_AGUARDANDO, filtrosVazios, temFiltro, passaNosFiltros } from './util.js';
 
@@ -40,6 +41,9 @@ const ui = {
   editandoTitulo: null,               // id do item com o título em edição (lápis)
   tagsAbertas: null,                  // id do item com a lista completa de tags aberta
   editandoEtapa: null,                // id da etapa com o texto em edição (uma por vez)
+  editandoComentario: null,           // id do comentário em edição (um por vez)
+  confirmarComentario: null,          // id do comentário com "Excluir?" aberto
+  comentariosAbertos: new Set(),      // ids dos comentários longos expandidos ("Ver tudo")
   buscando: false, termo: '', termoBruto: '',
   painel: null,
   armazenamento: 'verificando',       // 'verificando' | 'persistente' | 'nao' | 'indisponivel'
@@ -55,6 +59,9 @@ function avisarErro(contexto, err) {
 
 window.addEventListener('error', e => avisarErro('Erro inesperado', e.error || e.message));
 window.addEventListener('unhandledrejection', e => avisarErro('Erro inesperado', e.reason));
+// Atualização do banco (v1 → v2) esperando uma aba antiga do app fechar.
+window.addEventListener('pend-banco-bloqueado', () => toast(
+  'Há outra aba do Pendências aberta com a versão anterior. Feche-a para concluir a atualização.', { tempo: 15000 }));
 const main = $('main');
 const captura = $('capture-input');
 let ordemTela = [];
@@ -78,6 +85,9 @@ function render() {
   if (ui.editandoTitulo !== ui.aberto) ui.editandoTitulo = null;
   if (ui.tagsAbertas !== ui.aberto) ui.tagsAbertas = null;
   if (ui.editandoEtapa && store.dados.observacoes.get(ui.editandoEtapa)?.pendenciaId !== ui.aberto) ui.editandoEtapa = null;
+  const comentarioValido = id => { const c = id && store.dados.comentarios.get(id); return !!c && !c.excluido && c.pendenciaId === ui.aberto; };
+  if (ui.editandoComentario && !comentarioValido(ui.editandoComentario)) ui.editandoComentario = null;
+  if (ui.confirmarComentario && !comentarioValido(ui.confirmarComentario)) ui.confirmarComentario = null;
 
   renderizarChips($('chips'), abertas, ui.filtros);
   ordemTela = renderizarLista(ui);
@@ -85,6 +95,9 @@ function render() {
   for (const b of $('modo').children) b.setAttribute('aria-pressed', String(b.dataset.modo === ui.modo));
   renderizarPainel();
 }
+
+let timerResize;
+function debounceResize() { clearTimeout(timerResize); timerResize = setTimeout(agendar, 150); }
 
 function agendar() {
   if (agendado) return;
@@ -138,6 +151,18 @@ function definirAberto(id, { focarObs = false } = {}) {
   if (ui.editandoEtapa) {
     const campo = main.querySelector('.obs-edit');
     if (campo) salvarEtapa(campo);
+  }
+  if (ui.aberto && ui.aberto !== id) {
+    // Recolher salva a edição de comentário aberta e grava na hora o rascunho do campo novo.
+    if (ui.editandoComentario) {
+      const campo = main.querySelector('.cmt-edit');
+      if (campo) salvarComentario(campo);
+    }
+    const novo = linhaEl(ui.aberto)?.querySelector('.cmt-campo');
+    if (novo) gravarRascunho(ui.aberto, novo.value);
+    ui.editandoComentario = null;
+    ui.confirmarComentario = null;
+    ui.comentariosAbertos = new Set();
   }
   ui.aberto = id;
   ui.confirmarExclusao = null;
@@ -285,6 +310,78 @@ function moverEtapaComTeclado(obsId, passo) {
   main.querySelector(`[data-obs="${CSS.escape(obsId)}"] .obs-texto`)?.focus();
 }
 
+// ---------------------------------------------------------------------------
+// Comentários
+// ---------------------------------------------------------------------------
+
+const textoDoCampo = campo => campo.value.replace(/^\s*\n/, '').replace(/\s+$/, ''); // quebras internas ficam
+
+function passouDoLimite(texto) {
+  if (texto.length <= store.MAX_COMENTARIO) return false;
+  toast(`O comentário tem ${texto.length.toLocaleString('pt-BR')} caracteres; o limite é ${store.MAX_COMENTARIO.toLocaleString('pt-BR')}. Divida em dois.`,
+    { tipo: 'erro', tempo: 9000 });
+  return true;
+}
+
+function adicionarComentario(form) {
+  const campo = form.querySelector('.cmt-campo');
+  const id = form.closest('.row')?.dataset.id;
+  const texto = textoDoCampo(campo);
+  if (!id || !texto.trim() || passouDoLimite(texto)) return;
+  try {
+    store.criarComentario(id, texto);
+  } catch (err) {
+    avisarErro('Não foi possível salvar o comentário', err);
+    return;
+  }
+  campo.value = '';
+  apagarRascunho(id);
+  render();
+  ajustarAltura(campo);
+  atualizarContador(campo);
+  anunciar('Comentário adicionado');
+}
+
+// Devolve false se não deu para salvar (fica em edição).
+function salvarComentario(campo) {
+  const id = campo.closest('[data-cmt]')?.dataset.cmt;
+  const c = id && store.dados.comentarios.get(id);
+  if (!c) return true;
+  const texto = textoDoCampo(campo);
+  if (!texto.trim()) {
+    campo.value = c.texto;
+    toast('Para remover o comentário, use Excluir');
+    return true;
+  }
+  if (passouDoLimite(texto)) return false;
+  store.editarComentario(id, texto); // só grava (e marca "editado em") se o texto mudou
+  return true;
+}
+
+function editarComentario(cmtId) {
+  if (ui.editandoComentario && ui.editandoComentario !== cmtId) {
+    const aberto = main.querySelector('.cmt-edit');
+    if (aberto && !salvarComentario(aberto)) return;
+  }
+  ui.editandoComentario = cmtId;
+  ui.confirmarComentario = null;
+  render();
+  const campo = main.querySelector(`[data-cmt="${CSS.escape(cmtId)}"] .cmt-edit`);
+  if (!campo) return;
+  ajustarAltura(campo);
+  atualizarContador(campo);
+  campo.focus();
+  campo.setSelectionRange(campo.value.length, campo.value.length);
+}
+
+function terminarEdicaoComentario(cmtId, salvar) {
+  const campo = main.querySelector(`[data-cmt="${CSS.escape(cmtId)}"] .cmt-edit`);
+  if (salvar && campo && !salvarComentario(campo)) return;
+  ui.editandoComentario = null;
+  render();
+  main.querySelector(`[data-cmt="${CSS.escape(cmtId)}"] [data-act="cmt-editar"]`)?.focus();
+}
+
 function alternarTag(id, tagId) {
   const p = store.dados.pendencias.get(id);
   const tags = p.tags.includes(tagId) ? p.tags.filter(t => t !== tagId) : [...p.tags, tagId];
@@ -344,6 +441,39 @@ main.addEventListener('click', e => {
       toast('Etapa excluída.', { acao: { rotulo: 'Desfazer', fn: () => store.excluirObservacao(obsId, false) } });
       break;
     }
+    case 'cmt-editar': return editarComentario(alvo.closest('[data-cmt]').dataset.cmt);
+    case 'cmt-salvar': return terminarEdicaoComentario(alvo.closest('[data-cmt]').dataset.cmt, true);
+    case 'cmt-cancelar': return terminarEdicaoComentario(alvo.closest('[data-cmt]').dataset.cmt, false);
+    case 'cmt-mais': {
+      const cmtId = alvo.closest('[data-cmt]').dataset.cmt;
+      if (ui.comentariosAbertos.has(cmtId)) ui.comentariosAbertos.delete(cmtId);
+      else ui.comentariosAbertos.add(cmtId);
+      render();
+      main.querySelector(`[data-cmt="${CSS.escape(cmtId)}"] .cmt-mais`)?.focus();
+      return;
+    }
+    case 'cmt-excluir': {
+      const cmtId = alvo.closest('[data-cmt]').dataset.cmt;
+      if (ui.editandoComentario) { const c = main.querySelector('.cmt-edit'); if (c && !salvarComentario(c)) return; ui.editandoComentario = null; }
+      ui.confirmarComentario = cmtId;
+      render();
+      main.querySelector(`[data-cmt="${CSS.escape(cmtId)}"] [data-act="cmt-excluir-nao"]`)?.focus();
+      return;
+    }
+    case 'cmt-excluir-nao': {
+      const cmtId = ui.confirmarComentario;
+      ui.confirmarComentario = null;
+      render();
+      if (cmtId) main.querySelector(`[data-cmt="${CSS.escape(cmtId)}"] [data-act="cmt-excluir"]`)?.focus();
+      return;
+    }
+    case 'cmt-excluir-sim': {
+      const cmtId = alvo.closest('[data-cmt]').dataset.cmt;
+      ui.confirmarComentario = null;
+      store.excluirComentario(cmtId);
+      toast('Comentário excluído.', { acao: { rotulo: 'Desfazer', fn: () => { store.excluirComentario(cmtId, false); render(); } } });
+      break;
+    }
     case 'tag-alternar': alternarTag(id, alvo.dataset.tag); break;
     case 'aguardando': store.alternarAguardando(id); break;
     case 'limpar-prazo': store.editarPendencia(id, { prazo: '' }); break;
@@ -364,7 +494,10 @@ main.addEventListener('click', e => {
 });
 
 main.addEventListener('input', e => {
-  if (e.target.matches('.title-edit, .obs-edit')) ajustarAltura(e.target);
+  const t = e.target;
+  if (t.matches('.title-edit, .obs-edit')) ajustarAltura(t);
+  if (t.matches('.cmt-campo, .cmt-edit')) { ajustarAltura(t); atualizarContador(t); }
+  if (t.matches('.cmt-campo')) agendarRascunho(t.closest('.row').dataset.id, t.value); // a cada 0,4 s
 });
 
 // Sair do campo do título (tocar fora, Tab, Enter) salva.
@@ -386,6 +519,23 @@ main.addEventListener('change', e => {
 
 main.addEventListener('keydown', e => {
   const t = e.target;
+  // Comentários: Enter quebra linha; Ctrl+Enter (⌘+Enter no Mac) adiciona/salva.
+  const ctrlEnter = e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing;
+  if (t.matches('.cmt-campo') && ctrlEnter) {
+    e.preventDefault();
+    adicionarComentario(t.closest('form'));
+    return;
+  }
+  if (t.matches('.cmt-edit')) {
+    const cmtId = t.closest('[data-cmt]').dataset.cmt;
+    if (ctrlEnter) { e.preventDefault(); terminarEdicaoComentario(cmtId, true); return; }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation(); // Esc aqui só cancela a edição, não recolhe o item
+      terminarEdicaoComentario(cmtId, false);
+      return;
+    }
+  }
   if (t.matches('.obs-edit')) {
     if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
@@ -430,6 +580,11 @@ main.addEventListener('keydown', e => {
 });
 
 main.addEventListener('submit', e => {
+  if (e.target.matches('[data-form="cmt"]')) {
+    e.preventDefault();
+    adicionarComentario(e.target);
+    return;
+  }
   if (!e.target.matches('[data-form="obs"]')) return;
   e.preventDefault();
   const input = e.target.querySelector('[data-campo="obs"]');
@@ -664,6 +819,14 @@ async function iniciar() {
     definirAberto(id);
     linhaEl(id)?.scrollIntoView({ block: 'center', behavior: reduzirMovimento() ? 'auto' : 'smooth' });
   };
+  // Rascunhos de itens excluídos de vez não servem mais (o "Desfazer" da exclusão é na hora).
+  for (const id of idsComRascunho()) {
+    const p = store.dados.pendencias.get(id);
+    if (p && p.excluido) apagarRascunho(id);
+  }
+  // Largura mudou (girar o celular, redimensionar): "Ver tudo" depende da quebra de linhas.
+  window.addEventListener('resize', debounceResize);
+
   const ctx = { ui, render, definirTema, verificarArmazenamento, limparTela, aplicarFiltros, abrirItem };
   store.aoMudar(agendar);
   store.aoFalharGravacao(err => avisarErro('Não foi possível salvar neste aparelho', err));
@@ -716,6 +879,12 @@ async function iniciar() {
   pwa.aoMudar(() => renderizarPainel());
   // Depois de instalar, o navegador costuma liberar o armazenamento persistente: pede de novo.
   pwa.iniciarPwa({ aoInstalar: () => verificarArmazenamento(true) });
+
+  // Altura do cabeçalho fixo → scroll-padding (campo focado nunca fica escondido atrás dele).
+  const topo = document.querySelector('.topbar');
+  if (topo && 'ResizeObserver' in window) {
+    new ResizeObserver(() => document.documentElement.style.setProperty('--altura-topo', `${topo.offsetHeight}px`)).observe(topo);
+  }
 
   if (matchMedia('(hover: hover) and (pointer: fine)').matches) captura.focus();
 }

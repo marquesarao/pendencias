@@ -36,6 +36,8 @@ js/ui/dom.js             helpers de DOM: h(), ícones, reconciliação sem perde
 js/resumo-dados.js       cálculos do Resumo/Relatório (sem DOM)
 js/ui/resumo.js          painel Resumo (abas Resumo e Relatório)
 js/pwa.js                service worker, aviso de nova versão, instalação
+js/rascunhos.js          rascunho do comentário por item (localStorage, gravado a cada 0,4 s)
+js/ui/comentarios.js     comentários: texto com links (sem innerHTML), datas, lista só leitura
 fonts/manrope-var.woff2, fonts/OFL.txt
 icons/icon.svg, icon-192.png, icon-512.png, maskable-512.png
 tools/                   (fatia 5) geração dos PNGs a partir do SVG — fora do app
@@ -51,10 +53,14 @@ README.md, .gitignore
 | `pendencias` | id, titulo, tags, foco, feito, feitoEm, prazo, aguardando, **aguardandoEm**, ordem, criadoEm, atualizadoEm, excluido, **servidorEm** |
 | `observacoes` | id, pendenciaId, data, tipo, texto, ordem, atualizadoEm, excluido, **servidorEm** |
 | `tags` | id, nome, cor, ordem, atualizadoEm, excluido, **servidorEm** |
+| `comentarios` | id, pendenciaId, **criadoEm**, texto, **editadoEm**, atualizadoEm, excluido, servidorEm |
 
 - `id`: UUID gerado no app. `tags`: ids separados por `;` (ordem importa; a 1ª é a principal).
 - `foco/feito/aguardando/excluido`: `TRUE`/`FALSE`.
-- `feitoEm`, `criadoEm`, `data`: ISO 8601 completo (UTC). `prazo`: só data (`AAAA-MM-DD`).
+- `feitoEm`, `criadoEm`, `data`, `editadoEm`: ISO 8601 completo (UTC). `prazo`: só data (`AAAA-MM-DD`).
+- Comentário: `criadoEm` é **imutável** (o app nunca o reescreve); `editadoEm` vazio = nunca
+  editado, preenchido só quando o texto muda de fato (excluir/desfazer não conta). `texto` guarda
+  as quebras de linha; até 50.000 caracteres (limite da célula).
 - `atualizadoEm`: epoch ms, **definido pelo app** (base do last-write-wins).
 - `servidorEm`: epoch ms, **carimbado pelo servidor** a cada gravação (base do pull incremental).
 - `tipo` (observação): `ok` ou `falta`. `cor` (tag): `c1`…`c8`.
@@ -64,7 +70,7 @@ README.md, .gitignore
   na frente (para não virar fórmula) e o `'` é removido na leitura.
 - O script lê o cabeçalho e localiza as colunas por nome (colunas extras são toleradas).
 
-## 3. Modelo de dados local (IndexedDB `pendencias`, versão 1)
+## 3. Modelo de dados local (IndexedDB `pendencias`, versão 2)
 
 Tudo é carregado em memória ao abrir; a tela renderiza da memória; cada ação grava no
 IndexedDB imediatamente.
@@ -74,9 +80,16 @@ IndexedDB imediatamente.
 | `pendencias` | `id` | `{id, titulo, tags:[id…], foco, feito, feitoEm, prazo, aguardando, aguardandoEm, ordem, criadoEm, atualizadoEm, excluido}` |
 | `observacoes` | `id` (índice `pendenciaId`) | `{id, pendenciaId, data, tipo, texto, ordem, atualizadoEm, excluido}` |
 | `tags` | `id` | `{id, nome, cor, ordem, atualizadoEm, excluido}` |
+| `comentarios` | `id` (índice `pendenciaId`) | `{id, pendenciaId, criadoEm, texto, editadoEm, atualizadoEm, excluido}` |
 | `outbox` | `"tabela:id"` | `{table, row}` — foto completa e mais recente da linha |
 | `meta` | `key` | `lastSync` |
 
+- **Versão 1 → 2 (cache v8):** a atualização só **cria** a store `comentarios` (nunca apaga nem
+  reescreve as outras) e zera `lastSync` uma vez: o próximo pull traz tudo, para um aparelho que
+  passou um tempo na v7 receber comentários escritos por outro aparelho nesse meio-tempo (o
+  last-write-wins torna a repetição inofensiva). A fila (outbox) é preservada. Outra aba aberta na
+  versão antiga segura a atualização → aviso "Há outra aba do Pendências aberta…". Uma aba v8
+  que recebe `versionchange` (versão futura) fecha o banco e recarrega.
 - Local: booleanos JS e `tags` como array. Conversão para o formato de rede em `sync.js`.
 - `servidorEm` não precisa ser guardado localmente (só o servidor usa).
 - Outbox chaveada por `tabela:id`: várias edições offline do mesmo item viram uma única op
@@ -95,7 +108,9 @@ IndexedDB imediatamente.
 - **Reabrir:** `feito=false`, `feitoEm=""` (foco não volta).
 - **Termo:** na interface as observações se chamam **Etapas**. Dados, abas, colunas e stores
   continuam `observacoes` (sem mudança de esquema).
-- **Excluir pendência:** `excluido=true`; etapas ficam órfãs e são ignoradas (sem cascata).
+- **Excluir pendência:** `excluido=true`; etapas e comentários ficam órfãos e são ignorados (sem cascata).
+- **Comentários ≠ etapas:** tabela própria. Não entram no contador feitas/total, na reordenação,
+  no ○/✓ nem na lista de etapas do relatório.
 - **Excluir tag:** `excluido=true` na tag + remove o id dela de cada item (cada item vira uma op).
   Ids de tags inexistentes/excluídas são ignorados na tela.
 - **Captura com prefixo:** regex `^([^:/]{1,24}):\s*(.+)$`, comparação sem maiúsculas/acentos
@@ -115,7 +130,7 @@ responde HTTP 200; o resultado está em `ok`.
 
 ```
 → { token, action: "pull", since: <epoch ms> }
-← { ok: true, serverTime, pendencias: [...], observacoes: [...], tags: [...] }
+← { ok: true, serverTime, pendencias: [...], observacoes: [...], tags: [...], comentarios: [...] }
    (linhas com servidorEm > since; booleanos JSON, números JSON, tags como "id1;id2")
 
 → { token, action: "push", ops: [ { table, row }, ... ] }      (máx. 500 ops)
@@ -282,7 +297,9 @@ contando linhas inteiras na primeira tela: **antes 7** (Agrupar, padrão) / 8 (L
 ### Painéis
 
 - **Concluídas:** por dia ("Hoje", "Ontem", "seg., 28/10"), botão "Reabrir"; últimos 30 dias +
-  "Mostrar mais".
+  "Mostrar mais". Item com comentários: botão balão + nº (`aria-expanded`) que expande a lista
+  **só para leitura** (data/hora + texto inteiro com links; sem Editar/Excluir — para editar,
+  reabrir o item).
 - **Tags:** criar, renomear, cor (paleta fixa de 8 — ver "Paleta" abaixo), reordenar, excluir
   (com confirmação; desvincula dos itens).
 - **Configurações:** URL do Web App (valida `script.google.com/macros/s/…/exec`), token
@@ -293,8 +310,8 @@ contando linhas inteiras na primeira tela: **antes 7** (Agrupar, padrão) / 8 (L
 - **Armazenamento persistente:** ao iniciar, se `navigator.storage?.persist` existir, o app
   chama `navigator.storage.persisted()` e, se ainda não for persistente, `persist()`. O
   resultado alimenta o estado mostrado em Configurações (fatia 3).
-- **Busca:** `/` ou ⌕ troca a barra de captura pela de busca; filtra título e observações dos
-  itens abertos e concluídos hoje, destacando o trecho; `Esc` volta.
+- **Busca:** `/` ou ⌕ troca a barra de captura pela de busca; filtra título, etapas e
+  **comentários** dos itens abertos e concluídos hoje, destacando o trecho; `Esc` volta.
 
 ### Comportamentos de interação (fatia 3)
 
@@ -302,6 +319,7 @@ contando linhas inteiras na primeira tela: **antes 7** (Agrupar, padrão) / 8 (L
   `↓` com a captura vazia desce para a lista.
 - Concluídas de hoje ficam no fim da própria zona, riscadas (cor `--done`); não são arrastáveis.
 - Indicador de etapas na linha recolhida: ícone de lista + "feitas/total" (ex.: 1/3).
+- Indicador de comentários na linha recolhida: ícone de balão + quantidade (depois das etapas).
 - Indicador de aguardando: "aguardando · hoje" / "aguardando · 3 d" (dias de calendário desde
   `aguardandoEm`); a partir de **7 dias** no tom de alerta (`--danger`, o mesmo do prazo vencido),
   para lembrar de cobrar. Sem data: só "aguardando".
@@ -372,6 +390,35 @@ contando linhas inteiras na primeira tela: **antes 7** (Agrupar, padrão) / 8 (L
 - **Implementação:** as linhas de etapa são reaproveitadas por id (não recriadas a cada render),
   para o campo não perder o foco quando chega uma sincronização e para o toque em outra etapa
   não ser "engolido" quando a edição anterior salva e redesenha.
+- **Comentários** (seção "COMENTÁRIOS n", logo abaixo de ETAPAS): registro do que foi falado
+  numa reunião/conversa; não é algo a fazer (sem ○/✓).
+  - **Campo:** textarea "Escreva o que foi falado…", cresce até ~8 linhas e depois rola.
+    **Adicionar** (desabilitado com o campo vazio). Desktop: **Ctrl+Enter** (⌘+Enter no Mac)
+    adiciona, Enter quebra linha; dica "Ctrl + Enter adiciona" só com mouse. Celular: botão
+    Adicionar (Enter do teclado quebra linha). Espaços/linhas vazias nas pontas são aparados;
+    as quebras internas ficam.
+  - **Lista:** mais recente primeiro. Cabeçalho "03/11/2026 10:14" (fuso do aparelho) e, se
+    editado, "· editado em 03/11 10:20"; texto com quebras preservadas (`pre-wrap`); links
+    `http(s)://…` e `www.…` clicáveis (nova aba, `noopener`), montados com nós de texto — nunca
+    `innerHTML`; pontuação final e ")" sem par ficam fora do link.
+  - **Longos:** recolhidos em 6 linhas (`line-clamp`) com "Ver tudo"/"Ver menos"; o botão só
+    aparece se o texto realmente passar de 6 linhas na largura atual (medido após o desenho e ao
+    redimensionar).
+  - **Editar:** "Editar" troca o texto por um campo no lugar com **Salvar · Cancelar**;
+    Ctrl+Enter salva, Esc cancela **sem** recolher o item. Um em edição por vez; recolher o item
+    ou editar outro comentário salva antes. Texto vazio → volta ao original com o aviso "Para
+    remover o comentário, use Excluir". `criadoEm` nunca muda; `editadoEm` só se o texto mudou.
+  - **Excluir:** confirmação inline "Excluir este comentário? [Excluir] [Cancelar]" → aviso
+    "Comentário excluído." com **Desfazer** (não marca como editado).
+  - **Rascunho:** o campo novo é gravado por item no aparelho (`pend.rascunho:<id>`) 0,4 s depois
+    de parar de digitar, ao recolher o item e quando o app vai para segundo plano; volta ao
+    reabrir (inclusive depois de fechar o app); some ao Adicionar, ao esvaziar o campo, em
+    "Apagar dados deste aparelho" e (na abertura seguinte) para itens excluídos. Não sincroniza.
+  - **Limite:** 50.000 caracteres. Contador "n / 50.000" a partir de 90%; acima do limite fica em
+    `--danger` e Adicionar/Salvar avisam antes de enviar (o texto fica no campo).
+  - Celular: todos os botões dos comentários (Adicionar, Editar, Excluir, Salvar, Cancelar,
+    Ver tudo, Excluir/Cancelar da confirmação e o balão do painel Concluídas) com alvo de toque
+    ≥ 44 × 44 px. "Reabrir" do painel Concluídas também 44 px no celular (desktop: 30 px).
 - **Tags compactas:** só as marcadas (estilo selecionado, com número de ordem se 2+) + "+ Tag".
   "+ Tag" (ou tocar numa tag marcada) abre a lista completa no lugar; "Concluir", tocar fora da
   lista ou Esc recolhem. Sem tags marcadas: só "+ Tag".
@@ -545,8 +592,13 @@ escondido por eles, expande o item e rola até ele.
 - **Concluídas:** `feito` com `feitoEm` no período — título, data de conclusão, etapas
   "feitas/total" e a lista das etapas (✓/○, fonte menor).
 - **Em andamento:** abertas, **não aguardando**, com alguma alteração no período (`atualizadoEm`
-  do item ou de uma etapa não excluída) — título e etapas feitas/total. (Aguardando não se repete
-  aqui. Qualquer alteração conta, inclusive reordenar.)
+  do item ou de uma etapa não excluída, ou um **comentário escrito** no período — pelo
+  `criadoEm`) — título e etapas feitas/total. (Aguardando não se repete aqui. Qualquer alteração
+  conta, inclusive reordenar.)
+- **Incluir comentários:** opção desligada por padrão, lembrada por aparelho
+  (`pend.relComentarios`). Ligada: sob cada item (concluídas, em andamento e aguardando), os
+  comentários com `criadoEm` no período, em **ordem cronológica** (mais antigo primeiro) — na
+  tela, no Copiar e na impressão.
 - **Aguardando:** abertas aguardando, independentemente do período — título e "desde dd/mm"
   (ou "sem data").
 - **Totais** no topo: N concluídas · N em andamento · N aguardando.
@@ -564,6 +616,15 @@ Aguardando:
 ```
 
   (um bloco por tag, separados por linha em branco; sem etapas, a parte "(x/y etapas)" é omitida).
+  Com "Incluir comentários", cada comentário vem sob o item, recuado; linhas seguintes do mesmo
+  comentário com recuo maior:
+
+```
+• Projeto frete — 1/4 etapas
+    03/11 10:14 — Reunião com o fornecedor: prazo de entrega
+      confirmado para dia 15.
+```
+
 - **Impressão (Ctrl+P → PDF):** `@media print` mostra só o conteúdo do painel aberto, sem
   cabeçalho, abas, filtros e botão Copiar.
 
@@ -578,6 +639,11 @@ ficavam atrás dele, invisíveis e sem clique (afetava "Conexão salva", "Tag ex
   PowerShell / curl) descritas no README.
 - Fatia 3: desktop via `http://localhost` (contexto seguro).
 - Fatia 5: celular via GitHub Pages (https) — instalação como PWA.
+- **Regra permanente — área de transferência:** NUNCA ler a área de transferência real do
+  sistema (`navigator.clipboard.readText()`, `read()`, colar via script ou equivalente) — ela
+  pode conter dados pessoais do usuário. Para testar "Copiar", capturar o texto dentro da página
+  de teste (substituir `navigator.clipboard.writeText` por uma função que guarda o texto numa
+  variável da página) e conferir essa variável.
 
 ## 7. Backlog (não implementado)
 
@@ -627,6 +693,18 @@ definida; cada uma passa por desenho e aprovação antes de ser implementada.
   (valem também para itens e tags): a origem passou a ser o ponto onde o botão/dedo desceu (um
   movimento rápido não perde mais o deslocamento inicial) e o empate no centro do vizinho conta
   a favor do sentido do arraste (folga de 1 px).
+- 2026-11-03 — Comentários na pendência (cache v8). Decisões aprovadas: **aba nova
+  `comentarios`** (não reaproveitar `observacoes`: um aparelho na v7 mostraria a nota como etapa
+  e um toque no ○ a transformaria em etapa); `editadoEm` em coluna própria (derivar de
+  `atualizadoEm` marcaria "editado" depois de excluir/desfazer); IndexedDB v1 → v2 criando só a
+  store nova e zerando `lastSync` uma vez; Code.gs com `comentarios` em `TABELAS` e
+  `ABAS_OPCIONAIS` (sem a aba, pull devolve vazio e push recusa só essas ops, que esperam na fila);
+  Concluídas com comentários só leitura; comentário no período conta como movimentação; opção
+  "Incluir comentários" no Relatório. Ordem de publicação: README 1.10. Correção no caminho:
+  `scroll-padding-top` = altura do cabeçalho fixo (campo focado por Tab/rolagem automática
+  ficava escondido sob o cabeçalho no celular). Ajustes antes da publicação: alvos de toque dos
+  comentários ≥ 44 px no celular; regra permanente de nunca ler a área de transferência real nos
+  testes (seção 6).
 - 2026-11-02 — Parte C (cache v6): painel Resumo (4 blocos) e Relatório de concluídas com
   "Copiar" (seção 5c). Correções encontradas no caminho: avisos com painel aberto ficavam atrás
   do painel; fechamento do painel podia ser disparado pela animação de um filho; reabrir durante
