@@ -147,6 +147,10 @@ function definirAberto(id, { focarObs = false } = {}) {
   if (id) ui.selecionado = id;
   render();
   if (id && focarObs) linhaEl(id)?.querySelector('[data-campo="obs"]')?.focus();
+  if (id && matchMedia('(hover: none)').matches && store.observacoesDe(id).length >= 2 && !ler('pend.dicaEtapas', '')) {
+    guardar('pend.dicaEtapas', '1'); // mostra uma única vez neste aparelho
+    toast('Segure uma etapa para mudar a ordem', { tempo: 6000 });
+  }
 }
 
 function alternarAberto(id, focarObs = false) {
@@ -249,6 +253,36 @@ function terminarEdicaoEtapa(campo, salvar) {
   if (salvar) salvarEtapa(campo);
   ui.editandoEtapa = null;
   render();
+}
+
+// Anúncio só para leitores de tela (região aria-live fora da vista).
+function anunciar(texto) {
+  const el = $('anuncio');
+  el.textContent = '';
+  requestAnimationFrame(() => { el.textContent = texto; }); // limpar e repor força o anúncio repetido
+}
+
+// Etapas de um item na ordem da tela (ids).
+const idsDasEtapas = pendenciaId => store.observacoesDe(pendenciaId).map(o => o.id);
+
+function gravarOrdemEtapa(obsId, ids) {
+  const i = ids.indexOf(obsId);
+  store.moverObservacao(obsId, ids[i - 1] || null, ids[i + 1] || null, ids);
+  render();
+  anunciar(`Etapa movida para a posição ${i + 1} de ${ids.length}`);
+}
+
+// Alt+↑ / Alt+↓ no texto da etapa: sobe ou desce uma posição.
+function moverEtapaComTeclado(obsId, passo) {
+  const etapa = store.dados.observacoes.get(obsId);
+  const ids = idsDasEtapas(etapa.pendenciaId);
+  const de = ids.indexOf(obsId);
+  const para = de + passo;
+  if (para < 0 || para >= ids.length) return;
+  ids.splice(de, 1);
+  ids.splice(para, 0, obsId);
+  gravarOrdemEtapa(obsId, ids);
+  main.querySelector(`[data-obs="${CSS.escape(obsId)}"] .obs-texto`)?.focus();
 }
 
 function alternarTag(id, tagId) {
@@ -363,6 +397,12 @@ main.addEventListener('keydown', e => {
       terminarEdicaoEtapa(t, false);
       main.querySelector(`[data-obs="${CSS.escape(obsId)}"] .obs-texto`)?.focus();
     }
+  }
+  if (t.matches('.obs-texto') && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    e.stopPropagation();
+    moverEtapaComTeclado(t.closest('[data-obs]').dataset.obs, e.key === 'ArrowUp' ? -1 : 1);
+    return;
   }
   // Texto da etapa focado com Tab: Enter/espaço começa a editar.
   if (t.matches('.obs-texto') && (e.key === 'Enter' || e.key === ' ')) {
@@ -639,6 +679,23 @@ async function iniciar() {
       store.moverPendencia(el.dataset.id, ids[i - 1] || null, ids[i + 1] || null, ids);
       render();
     },
+  });
+
+  // Etapas do item aberto: celular = segurar a linha (~300 ms) e arrastar; desktop = alça ⠿ no
+  // hover ou a própria linha depois de mover 5 px. Toque/clique rápido continua editando; ○/✓ e
+  // × (botões) nunca começam arraste; o campo em edição também não.
+  arrastavel(main, {
+    item: '.obs',
+    alca: '.obs-grip',
+    alcaOpcional: true,
+    ignorar: 'button, input, textarea',
+    idDe: el => el.dataset.obs,
+    // Edição aberta em outra etapa: salva antes de começar (as linhas são reaproveitadas).
+    aoIniciar: () => {
+      const campo = main.querySelector('.obs-edit');
+      if (campo) terminarEdicaoEtapa(campo, true);
+    },
+    soltar: (zona, el, ids) => gravarOrdemEtapa(el.dataset.obs, ids),
   });
 
   // Virada do dia: concluídas de ontem saem da lista.

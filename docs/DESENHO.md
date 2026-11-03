@@ -307,6 +307,7 @@ contando linhas inteiras na primeira tela: **antes 7** (Agrupar, padrão) / 8 (L
   para lembrar de cobrar. Sem data: só "aguardando".
 - Arraste: mouse arrasta de qualquer ponto da linha após 5 px (clique continua sendo clique);
   toque exige segurar ~300 ms (deslizar rápido continua rolando). Tags: arraste pela alça.
+  Etapas: mesma regra, dentro do item aberto (ver "Reordenar etapas").
 - "Desfazer" no aviso após excluir pendência e após excluir observação.
 - Item criado fora do filtro ativo (prefixo de outra tag) → aviso com "Ver todas".
 - Busca filtra também o "Em foco"; achado só em observação mostra o trecho na linha.
@@ -347,6 +348,27 @@ contando linhas inteiras na primeira tela: **antes 7** (Agrupar, padrão) / 8 (L
   Uma etapa em edição por vez; tocar no texto de outra salva a atual e já abre a outra. Recolher
   o item (tocar fora, ⌃, título, outro item) salva antes. Desktop: cursor de texto e contorno
   fino (`--muted-ui`) no hover. Celular: o texto ocupa a altura toda da linha (alvo ≥ 44 px).
+- **Reordenar etapas** (ordem manual, por item; vale em todos os aparelhos):
+  - **Celular:** segurar a linha ~300 ms e arrastar (sem alça fixa). Toque rápido no texto
+    continua editando; ○/✓ e × continuam iguais; deslizar rápido rola a página. Na linha, seleção
+    de texto e menu de contexto do Android/Chrome ficam bloqueados (`user-select: none`,
+    `-webkit-touch-callout: none`, `contextmenu` cancelado durante o gesto); o campo de edição
+    mantém a seleção normal.
+  - **Desktop:** alça ⠿ à esquerda da linha, só no hover (começa na hora); a linha também arrasta
+    depois de 5 px. Teclado: com o foco no texto da etapa, **Alt+↑ / Alt+↓** move uma posição
+    (o foco fica na etapa).
+  - **Durante o arraste:** a etapa "levanta" (fundo `--surface`, sombra `--shadow-3`) e as outras
+    abrem espaço com animação curta (0,18 s; desligada com `prefers-reduced-motion`). Só dentro
+    do próprio item.
+  - **Leitor de tela:** região `aria-live` anuncia "Etapa movida para a posição 2 de 4".
+  - **Não fecha o item** e não tira o foco; se havia uma etapa em edição, ela é **salva antes**
+    do arraste começar.
+  - **Dica única:** no celular (`hover: none`), na 1ª vez que um item com 2+ etapas é aberto,
+    aviso "Segure uma etapa para mudar a ordem"; nunca se repete (`pend.dicaEtapas`).
+  - **Gravação:** `moverObservacao` grava só a etapa movida com `ordem` = média das vizinhas
+    (topo: 1ª − 1; fim: última + 1). Se as vizinhas estiverem coladas (diferença < 1e-6), renumera
+    o item inteiro 0, 1, 2… Cada etapa alterada ganha novo `atualizadoEm` e entra na fila; a
+    planilha guarda o valor na coluna `ordem` da aba `observacoes` (pode ser fracionário/negativo).
 - **Implementação:** as linhas de etapa são reaproveitadas por id (não recriadas a cada render),
   para o campo não perder o foco quando chega uma sincronização e para o toque em outra etapa
   não ser "engolido" quando a edição anterior salva e redesenha.
@@ -600,6 +622,11 @@ definida; cada uma passa por desenho e aprovação antes de ser implementada.
   confirmação e contagem da fila; pergunta na primeira conexão com dados locais.
 - 2026-11-02 — Fatia 5: PWA (seção 5b). Acessibilidade: a área do título da linha virou
   `role="button"` focável (Enter/espaço abre e recolhe), corrigindo `aria-expanded` sem papel.
+- 2026-11-03 — Reordenar etapas (cache v7), opção 1 "segurar a linha" — ver "Item aberto:
+  layout". `js/ui/drag.js` ganhou `alcaOpcional`, `idDe` e `aoIniciar`. Correções no arraste
+  (valem também para itens e tags): a origem passou a ser o ponto onde o botão/dedo desceu (um
+  movimento rápido não perde mais o deslocamento inicial) e o empate no centro do vizinho conta
+  a favor do sentido do arraste (folga de 1 px).
 - 2026-11-02 — Parte C (cache v6): painel Resumo (4 blocos) e Relatório de concluídas com
   "Copiar" (seção 5c). Correções encontradas no caminho: avisos com painel aberto ficavam atrás
   do painel; fechamento do painel podia ser disparado pela animação de um filho; reabrir durante

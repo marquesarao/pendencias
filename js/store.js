@@ -271,6 +271,27 @@ export function editarObservacao(id, texto) {
   return novo;
 }
 
+/**
+ * Move uma etapa para entre `antes` e `depois` (ids vizinhos, ou null nas pontas).
+ * Grava só a etapa movida; renumera as etapas do item se o espaço entre vizinhas acabar.
+ * @param {string[]} ordemIds todas as etapas do item, já na ordem nova
+ */
+export function moverObservacao(id, antesId, depoisId, ordemIds) {
+  const antes = antesId && dados.observacoes.get(antesId);
+  const depois = depoisId && dados.observacoes.get(depoisId);
+  let ordem;
+  if (antes && depois) ordem = (antes.ordem + depois.ordem) / 2;
+  else if (antes) ordem = antes.ordem + 1;
+  else if (depois) ordem = depois.ordem - 1;
+  else return;
+
+  if (!(antes && depois && Math.abs(depois.ordem - antes.ordem) < 1e-6)) {
+    persistir([['observacoes', alterar('observacoes', id, { ordem })]]);
+    return;
+  }
+  persistir(ordemIds.map((oid, i) => ['observacoes', alterar('observacoes', oid, { ordem: i })]));
+}
+
 export function excluirObservacao(id, excluido = true) {
   const novo = alterar('observacoes', id, { excluido });
   if (novo) persistir([['observacoes', novo]]);

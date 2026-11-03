@@ -13,13 +13,17 @@ const BORDA_ROLAGEM = 72;
  * @param {HTMLElement} raiz  elemento que recebe os eventos (delegação)
  * @param {object} op
  * @param {string} op.item    seletor do item arrastável
- * @param {string} [op.alca]  seletor da alça; se houver, arrasta só por ela
+ * @param {string} [op.alca]  seletor da alça; se houver, arrasta só por ela (salvo alcaOpcional)
+ * @param {boolean} [op.alcaOpcional] alça começa na hora, mas a linha também arrasta (5 px / segurar)
+ * @param {(el: HTMLElement) => string} [op.idDe] id do item (padrão: data-id)
+ * @param {(el: HTMLElement) => void} [op.aoIniciar] antes de medir (ex.: salvar uma edição aberta)
  * @param {string} [op.ignorar] seletor de áreas que não iniciam arraste
  * @param {(el: HTMLElement) => boolean} [op.pode]
  * @param {(zona: HTMLElement, el: HTMLElement, ids: string[], indice: number) => void} op.soltar
  */
 export function arrastavel(raiz, op) {
   const pode = op.pode || (() => true);
+  const idDe = op.idDe || (el => el.dataset.id);
   let p = null; // gesto em andamento
 
   raiz.addEventListener('pointerdown', e => {
@@ -27,11 +31,11 @@ export function arrastavel(raiz, op) {
     const el = e.target.closest(op.item);
     if (!el || !raiz.contains(el) || !pode(el)) return;
     const naAlca = op.alca ? !!e.target.closest(op.alca) : false;
-    if (op.alca && !naAlca) return;
+    if (op.alca && !naAlca && !op.alcaOpcional) return;
     if (!naAlca && op.ignorar && e.target.closest(op.ignorar)) return;
 
     p = {
-      el, id: e.pointerId, tipo: e.pointerType, x0: e.clientX, y0: e.clientY,
+      el, id: e.pointerId, tipo: e.pointerType, x0: e.clientX, y0: e.clientY, scroll0: scrollY,
       ativo: false, timer: null,
     };
     if (naAlca) {
@@ -74,6 +78,7 @@ export function arrastavel(raiz, op) {
   }, true);
 
   function iniciar(e) {
+    op.aoIniciar?.(p.el); // pode redesenhar: os itens são reaproveitados, p.el continua válido
     const zona = p.el.parentElement;
     const itens = [...zona.children].filter(c => c.matches(op.item) && pode(c));
     if (itens.length < 2) { cancelar(); return; }
@@ -86,7 +91,9 @@ export function arrastavel(raiz, op) {
       const r = c.getBoundingClientRect();
       return { topo: r.top + scrollY, altura: r.height };
     });
-    p.yInicio = e.clientY + scrollY;
+    // Origem = ponto onde o dedo/botão desceu (não o 1º movimento): um movimento rápido que já
+    // passou do limiar não perde o deslocamento inicial.
+    p.yInicio = p.y0 + p.scroll0;
     p.yAtual = e.clientY;
     p.destino = p.indice0;
 
@@ -95,6 +102,7 @@ export function arrastavel(raiz, op) {
     document.body.classList.add('arrastando-algo');
     try { p.el.setPointerCapture(p.id); } catch (_) {}
     if (p.tipo === 'touch' && navigator.vibrate) navigator.vibrate(8);
+    mover();
     rolarNaBorda();
   }
 
@@ -106,7 +114,10 @@ export function arrastavel(raiz, op) {
     const centro = m0.topo + m0.altura / 2 + dy;
     let destino = 0;
     p.medidas.forEach((m, i) => {
-      if (i !== p.indice0 && m.topo + m.altura / 2 < centro) destino++;
+        // Empate (centro sobre o centro do outro, com folga de 1 px por causa dos pixels
+      // fracionários) conta a favor do sentido do arraste.
+      const c = m.topo + m.altura / 2;
+      if (i !== p.indice0 && (dy > 0 ? c <= centro + 1 : c < centro - 1)) destino++;
     });
     p.destino = destino;
 
@@ -142,12 +153,12 @@ export function arrastavel(raiz, op) {
     if (!p.ativo) { p = null; return; }
     const { zona, el, itens, indice0, destino } = p;
     limpar();
-    if (p.tipo !== 'touch') raiz.dataset.engolirClique = '1';
+    raiz.dataset.engolirClique = '1';
     setTimeout(() => { delete raiz.dataset.engolirClique; }, 0);
     p = null;
     if (cancelado || destino === indice0) return;
-    const ids = itens.filter(c => c !== el).map(c => c.dataset.id);
-    ids.splice(destino, 0, el.dataset.id);
+    const ids = itens.filter(c => c !== el).map(idDe);
+    ids.splice(destino, 0, idDe(el));
     op.soltar(zona, el, ids, destino);
   }
 

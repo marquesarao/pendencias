@@ -206,6 +206,8 @@ function atualizarDetalhe(det, p, etapas, feitas, o) {
 
 function criarEtapa(id) {
   return h('li', { class: 'obs', 'data-obs': id },
+    // Alça de arraste: só no hover do desktop; no celular arrasta segurando a linha.
+    h('span', { class: 'obs-grip', 'aria-hidden': 'true', title: 'Arrastar para mudar a ordem' }, icone('grip')),
     h('button', { class: 'obs-tipo', type: 'button', 'data-act': 'obs-alternar' }, icone('check')),
     h('span', { class: 'obs-texto', role: 'button', tabindex: '0', 'data-act': 'obs-editar' }),
     h('button', { class: 'obs-x', type: 'button', 'data-act': 'obs-excluir', 'aria-label': 'Excluir etapa' }, icone('x')));
@@ -231,6 +233,7 @@ function atualizarEtapa(li, x, o) {
   if (!editando) {
     texto.replaceChildren(realcar(x.texto, o.termo));
     texto.setAttribute('aria-label', `Editar etapa: ${x.texto}`);
+    texto.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown'); // mover a etapa
   }
 }
 
